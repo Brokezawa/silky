@@ -1082,9 +1082,26 @@ template tooltip*(text: string) =
     sk.tooltipPos = tooltipPos
   sk.showTooltip = true
 
+  let fadeAlpha = clamp(
+    sk.tooltipFadeInTime / sk.tooltipFadeInDuration, 0.0, 1.0
+  ).float32
+  let fadeByte = (255.0 * fadeAlpha).uint8
   sk.pushLayout(sk.tooltipPos, tooltipSize)
-  sk.draw9Patch("tooltip.9patch", 6, sk.pos, sk.size)
-  discard sk.drawText(sk.textStyle, tooltipText, sk.pos + vec2(sk.theme.padding), sk.theme.defaultTextColor)
+  sk.draw9Patch(
+    "tooltip.9patch", 6, sk.pos, sk.size,
+    rgbx(fadeByte, fadeByte, fadeByte, fadeByte)
+  )
+  let base = sk.theme.defaultTextColor
+  let textColor = rgbx(
+    (base.r.float32 * fadeAlpha).uint8,
+    (base.g.float32 * fadeAlpha).uint8,
+    (base.b.float32 * fadeAlpha).uint8,
+    (base.a.float32 * fadeAlpha).uint8,
+  )
+  discard sk.drawText(
+    sk.textStyle, tooltipText,
+    sk.pos + vec2(sk.theme.padding), textColor
+  )
   sk.popLayout()
 
   sk.popClipRect()

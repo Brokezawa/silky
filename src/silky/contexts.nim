@@ -98,6 +98,8 @@ type
     tooltipPos*: Vec2
     tooltipAnchor*: Rect
     tooltipOffset*: Vec2
+    tooltipFadeInTime*: float64
+    tooltipFadeInDuration*: float64 = 0.25
     framebufferSize*: IVec2
     lastMousePos*: Vec2
     tooltipThreshold*: float64 = 0.5
@@ -263,6 +265,11 @@ proc beginUiShared*(sk: Silky, window: Window, size: IVec2) =
     sk.lastMousePos = currentMousePos
   else:
     sk.mouseIdleTime += deltaTime
+
+  if sk.tooltipActive:
+    sk.tooltipFadeInTime += deltaTime
+  else:
+    sk.tooltipFadeInTime = 0
 
   measurePush("frame")
   sk.pushClipRect(rect(0, 0, sk.size.x, sk.size.y))
