@@ -94,6 +94,10 @@ type
     mouseConsumed*: bool = false
     hover*: bool = false
     showTooltip*: bool = false
+    tooltipActive*: bool = false
+    tooltipPos*: Vec2
+    tooltipAnchor*: Rect
+    tooltipOffset*: Vec2
     framebufferSize*: IVec2
     lastMousePos*: Vec2
     tooltipThreshold*: float64 = 0.5
@@ -239,6 +243,7 @@ proc beginUiShared*(sk: Silky, window: Window, size: IVec2) =
         createDir("tmp")
         dumpMeasures("tmp/trace.json")
 
+  sk.tooltipActive = sk.showTooltip
   sk.showTooltip = false
   sk.mouseConsumed = false
   sk.framebufferSize = size
@@ -259,7 +264,6 @@ proc beginUiShared*(sk: Silky, window: Window, size: IVec2) =
   else:
     sk.mouseIdleTime += deltaTime
 
-  sk.showTooltip = false
   measurePush("frame")
   sk.pushClipRect(rect(0, 0, sk.size.x, sk.size.y))
 

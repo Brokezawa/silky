@@ -1055,23 +1055,34 @@ template tooltip*(text: string) =
 
   let textSize = sk.getTextSize(sk.textStyle, tooltipText)
   let tooltipSize = textSize + vec2(sk.theme.padding.float32 * 2, sk.theme.padding.float32 * 2)
-  let mousePos = sk.mousePos
-
-  # Position tooltip near mouse, offset slightly to avoid cursor.
-  var tooltipPos = mousePos + vec2(16, 16)
+  # Anchor below widget rect if set, else offset from mouse.
+  var tooltipPos =
+    if sk.tooltipAnchor.w > 0 and sk.tooltipAnchor.h > 0:
+      vec2(
+        sk.tooltipAnchor.x + (sk.tooltipAnchor.w - tooltipSize.x) * 0.5,
+        sk.tooltipAnchor.y + sk.tooltipAnchor.h + 8
+      )
+    else:
+      sk.mousePos + vec2(16, 16)
+  tooltipPos += sk.tooltipOffset
+  let anchorPos = tooltipPos
 
   # Keep tooltip on screen.
   let root = sk.rootSize
   if tooltipPos.x + tooltipSize.x > root.x:
     tooltipPos.x = root.x - tooltipSize.x - sk.theme.padding.float32
   if tooltipPos.y + tooltipSize.y > root.y:
-    tooltipPos.y = mousePos.y - tooltipSize.y - 4
+    tooltipPos.y = anchorPos.y - tooltipSize.y - 4
 
   # Ensure tooltip doesn't go off-screen left or top.
   tooltipPos.x = max(tooltipPos.x, sk.theme.padding.float32)
   tooltipPos.y = max(tooltipPos.y, sk.theme.padding.float32)
 
-  sk.pushLayout(tooltipPos, tooltipSize)
+  if not sk.tooltipActive:
+    sk.tooltipPos = tooltipPos
+  sk.showTooltip = true
+
+  sk.pushLayout(sk.tooltipPos, tooltipSize)
   sk.draw9Patch("tooltip.9patch", 6, sk.pos, sk.size)
   discard sk.drawText(sk.textStyle, tooltipText, sk.pos + vec2(sk.theme.padding), sk.theme.defaultTextColor)
   sk.popLayout()

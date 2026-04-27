@@ -484,6 +484,7 @@ proc newSilky*(atlasPngPath: string): Silky =
 
 proc beginUi*(sk: Silky, window: auto, size: IVec2) =
   ## Begins a new UI frame.
+  sk.tooltipActive = sk.showTooltip
   sk.showTooltip = false
   sk.framebufferSize = size
   sk.mousePos = window.mousePos.vec2 / sk.uiScale
