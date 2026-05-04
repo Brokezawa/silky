@@ -24,6 +24,9 @@ var
   showOverlapWindow = true
   behindClicked = false
   inFrontClicked = false
+  foldout1Open = false
+  foldout2Open = false
+  foldout3Open = false
 
 window.onFrame = proc() =
   sk.beginUI(window, window.size)
@@ -34,7 +37,7 @@ window.onFrame = proc() =
       sk.at = vec2(x.float32 * 256, y.float32 * 256)
       image("testTexture", rgbx(30, 30, 30, 255))
 
-  subWindow("Layouts", showOverlapWindow, vec2(520, 100), vec2(250, 200)):
+  subWindow("Layouts", showOverlapWindow, vec2(200, 100), vec2(250, 400)):
     text("Two overlapping buttons:")
 
     var clicked = false
@@ -49,6 +52,24 @@ window.onFrame = proc() =
       clicked = true
 
     inFrontClicked = clicked
+
+    button(if foldout1Open: "- Section A" else: "+ Section A"):
+      foldout1Open = not foldout1Open
+    if foldout1Open:
+      text("  Content of section A")
+      text("  More content here")
+
+    button(if foldout2Open: "- Section B" else: "+ Section B"):
+      foldout2Open = not foldout2Open
+    if foldout2Open:
+      text("  Section B item 1")
+      text("  Section B item 2")
+      text("  Section B item 3")
+
+    button(if foldout3Open: "- Section C" else: "+ Section C"):
+      foldout3Open = not foldout3Open
+    if foldout3Open:
+      text("  Section C content")
 
   if not showOverlapWindow:
     if window.buttonPressed[MouseLeft]:
