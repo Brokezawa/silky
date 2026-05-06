@@ -454,6 +454,9 @@ proc drawRect*(sk: Silky, pos: Vec2, size: Vec2, color: ColorRGBX) {.inline.} =
   ## Stub for drawing a solid rectangle.
   discard
 
+proc drawTriangle*(sk: Silky, positions: array[3, Vec2], uvs: array[3, Vec2], colors: array[3, ColorRGBX]) {.inline.} =
+  discard
+
 proc draw9Patch*(sk: Silky, name: string, patch: int, pos: Vec2, size: Vec2, color = rgbx(255, 255, 255, 255)) {.inline.} =
   ## Stub for drawing a 9-patch image.
   discard
