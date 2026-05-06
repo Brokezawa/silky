@@ -104,6 +104,7 @@ type
     tooltipActive*: bool = false
     tooltipPos*: Vec2
     tooltipAnchor*: Rect
+    tooltipLastAnchor*: Rect
     tooltipOffset*: Vec2
     tooltipFadeInTime*: float64
     tooltipFadeInDuration*: float64 = 0.25
@@ -417,7 +418,8 @@ proc drawTriangle*(
       uv: uvs[i],
       color: colors[i],
       clipPos: cPos,
-      clipSize: cSize
+      clipSize: cSize,
+      maskUv: vec2(-1, -1)
     ))
 
 proc drawText*(

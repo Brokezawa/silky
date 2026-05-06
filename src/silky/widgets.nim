@@ -1150,8 +1150,9 @@ template tooltip*(text: string) =
   sk.pushLayer(PopupsLayer)
   sk.pushRawClipRect(rect(vec2(0, 0), sk.rootSize))
 
-  let textSize = sk.getTextSize(sk.textStyle, tooltipText)
-  let tooltipSize = textSize + vec2(sk.theme.padding.float32 * 2, sk.theme.padding.float32 * 2)
+  let
+    textSize = sk.getTextSize(sk.textStyle, tooltipText)
+    tooltipSize = textSize + vec2(sk.theme.padding.float32 * 2, sk.theme.padding.float32 * 2)
   # Anchor below widget rect if set, else offset from mouse.
   var tooltipPos =
     if sk.tooltipAnchor.w > 0 and sk.tooltipAnchor.h > 0:
@@ -1175,30 +1176,79 @@ template tooltip*(text: string) =
   tooltipPos.x = max(tooltipPos.x, sk.theme.padding.float32)
   tooltipPos.y = max(tooltipPos.y, sk.theme.padding.float32)
 
-  if not sk.tooltipActive:
+  let anchorChanged = sk.tooltipAnchor != sk.tooltipLastAnchor
+  if not sk.tooltipActive or anchorChanged:
     sk.tooltipPos = tooltipPos
+    sk.tooltipFadeInTime = 0
+  sk.tooltipLastAnchor = sk.tooltipAnchor
   sk.showTooltip = true
 
-  let fadeAlpha = clamp(
-    sk.tooltipFadeInTime / sk.tooltipFadeInDuration, 0.0, 1.0
-  ).float32
-  let fadeByte = (255.0 * fadeAlpha).uint8
+  let
+    fadeAlpha = clamp(sk.tooltipFadeInTime / sk.tooltipFadeInDuration, 0.0, 1.0).float32
+    fadeByte = (255.0 * fadeAlpha).uint8
   sk.pushLayout(sk.tooltipPos, tooltipSize)
-  sk.draw9Patch(
-    "tooltip.9patch", 6, sk.pos, sk.size,
-    rgbx(fadeByte, fadeByte, fadeByte, fadeByte)
-  )
-  let base = sk.theme.defaultTextColor
-  let textColor = rgbx(
-    (base.r.float32 * fadeAlpha).uint8,
-    (base.g.float32 * fadeAlpha).uint8,
-    (base.b.float32 * fadeAlpha).uint8,
-    (base.a.float32 * fadeAlpha).uint8,
-  )
-  discard sk.drawText(
-    sk.textStyle, tooltipText,
-    sk.pos + vec2(sk.theme.padding), textColor
-  )
+
+  # Draw stem first, then 9-patch on top covers the base.
+  if sk.tooltipAnchor.w > 0 and sk.tooltipAnchor.h > 0:
+    const
+      StemSize = 5.0
+      Inset = 2.0
+    let
+      anchorCenter = sk.tooltipAnchor.xy +
+        vec2(sk.tooltipAnchor.w, sk.tooltipAnchor.h) * 0.5
+      dists = [
+        abs(anchorCenter.y - sk.pos.y),
+        abs(anchorCenter.y - (sk.pos.y + sk.size.y)),
+        abs(anchorCenter.x - sk.pos.x),
+        abs(anchorCenter.x - (sk.pos.x + sk.size.x))
+      ]
+      side = block:
+        var closest = 0
+        for idx in 1 .. 3:
+          if dists[idx] < dists[closest]: closest = idx
+        closest
+      whiteUv = sk.atlas.entries[WhiteTileKey]
+      stemUv = vec2(whiteUv.x.float32, whiteUv.y.float32) + vec2(whiteUv.width.float32, whiteUv.height.float32) * 0.5
+      stemUvs = [stemUv, stemUv, stemUv]
+      bodyGray = (3.0 * fadeAlpha).uint8
+      stemColor = rgbx(bodyGray, bodyGray, bodyGray, fadeByte)
+      stemColors = [stemColor, stemColor, stemColor]
+
+    var
+      base, tip: Vec2
+      perp: Vec2
+
+    if side <= 1:
+      let x = clamp(anchorCenter.x,
+        sk.pos.x + StemSize, sk.pos.x + sk.size.x - StemSize)
+      if side == 0:
+        base = vec2(x, sk.pos.y + Inset)
+        tip = vec2(x, sk.pos.y - StemSize)
+      else:
+        base = vec2(x, sk.pos.y + sk.size.y - Inset)
+        tip = vec2(x, sk.pos.y + sk.size.y + StemSize)
+      perp = vec2(StemSize, 0)
+    else:
+      let y = clamp(anchorCenter.y, sk.pos.y + StemSize, sk.pos.y + sk.size.y - StemSize)
+      if side == 2:
+        base = vec2(sk.pos.x + Inset, y)
+        tip = vec2(sk.pos.x - StemSize, y)
+      else:
+        base = vec2(sk.pos.x + sk.size.x - Inset, y)
+        tip = vec2(sk.pos.x + sk.size.x + StemSize, y)
+      perp = vec2(0, StemSize)
+    sk.drawTriangle([base - perp, base + perp, tip], stemUvs, stemColors)
+  sk.draw9Patch("tooltip.9patch", 6, sk.pos, sk.size, rgbx(fadeByte, fadeByte, fadeByte, fadeByte))
+
+  let
+    base = sk.theme.defaultTextColor
+    textColor = rgbx(
+      (base.r.float32 * fadeAlpha).uint8,
+      (base.g.float32 * fadeAlpha).uint8,
+      (base.b.float32 * fadeAlpha).uint8,
+      (base.a.float32 * fadeAlpha).uint8,
+    )
+  discard sk.drawText(sk.textStyle, tooltipText, sk.pos + vec2(sk.theme.padding), textColor)
   sk.popLayout()
 
   sk.popClipRect()

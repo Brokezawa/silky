@@ -284,6 +284,13 @@ type
     mouseConsumed*: bool = false
     hover*: bool = false
     showTooltip*: bool = false
+    tooltipActive*: bool = false
+    tooltipPos*: Vec2
+    tooltipAnchor*: Rect
+    tooltipLastAnchor*: Rect
+    tooltipOffset*: Vec2
+    tooltipFadeInTime*: float64
+    tooltipFadeInDuration*: float64 = 0.25
     framebufferSize*: IVec2
     lastMousePos*: Vec2
     tooltipThreshold*: float64 = 0.5
