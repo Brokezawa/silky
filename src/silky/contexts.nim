@@ -615,11 +615,14 @@ proc getTextSize*(sk: Silky, font: string, text: string): Vec2 =
   let
     fontData = sk.atlas.fonts[font]
     runedText = text.toRunes
-  var currentPos = vec2(0, fontData.lineHeight)
+  var
+    currentPos = vec2(0, fontData.lineHeight)
+    maxWidth = 0.0'f
 
   for i in 0 ..< runedText.len:
     let rune = runedText[i]
     if rune == Rune(10):
+      maxWidth = max(maxWidth, currentPos.x)
       currentPos.x = 0
       currentPos.y += fontData.lineHeight
       continue
@@ -639,7 +642,8 @@ proc getTextSize*(sk: Silky, font: string, text: string): Vec2 =
       if nextGlyphStr in entry.kerning:
         currentPos.x += entry.kerning[nextGlyphStr]
 
-  currentPos
+  maxWidth = max(maxWidth, currentPos.x)
+  vec2(maxWidth, currentPos.y)
 
 proc newSilky*(
   window: Window,

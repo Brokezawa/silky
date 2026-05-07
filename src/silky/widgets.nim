@@ -1144,7 +1144,7 @@ template menuItem*(label: string, body: untyped) =
     sk.menuItemEnd(ctx)
 
 template tooltip*(text: string) =
-  ## Draws a tooltip with fade-in and optional stem arrow.
+  ## Draws a tooltip with fade-in and stem image.
   let tooltipText = text
   sk.pushLayer(PopupsLayer)
   sk.pushRawClipRect(rect(vec2(0, 0), sk.rootSize))
@@ -1155,22 +1155,26 @@ template tooltip*(text: string) =
     tooltipSize = textSize + vec2(pad * 2, pad * 2)
     hasAnchor = sk.tooltipAnchor.w > 0 and
       sk.tooltipAnchor.h > 0
+    root = sk.rootSize
 
   # Position below anchor or offset from mouse.
   var tooltipPos =
     if hasAnchor:
-      vec2(
-        sk.tooltipAnchor.x +
-          (sk.tooltipAnchor.w - tooltipSize.x) * 0.5,
-        sk.tooltipAnchor.y + sk.tooltipAnchor.h + 8
-      )
+      let
+        anchorCx = sk.tooltipAnchor.x +
+          sk.tooltipAnchor.w * 0.5
+        tx =
+          if tooltipSize.x > sk.tooltipAnchor.w * 2:
+            anchorCx - pad
+          else:
+            anchorCx - tooltipSize.x * 0.5
+      vec2(tx, sk.tooltipAnchor.y + sk.tooltipAnchor.h + 8)
     else:
       sk.mousePos + vec2(16, 16)
   tooltipPos += sk.tooltipOffset
   let unclamped = tooltipPos
 
   # Clamp to window bounds.
-  let root = sk.rootSize
   if tooltipPos.x + tooltipSize.x > root.x:
     tooltipPos.x = root.x - tooltipSize.x - pad
   if tooltipPos.y + tooltipSize.y > root.y:
@@ -1196,14 +1200,25 @@ template tooltip*(text: string) =
     fadeColor = rgbx(fadeByte, fadeByte, fadeByte, fadeByte)
   sk.pushLayout(sk.tooltipPos, tooltipSize)
 
-  # Draw stem triangle pointing toward the anchor.
-  if hasAnchor:
-    const
-      Stem = 5.0
-      Inset = 2.0
+  sk.draw9Patch(
+    "tooltip.9patch", 6, sk.pos, sk.size, fadeColor
+  )
+
+  # Draw stem on top of background, overlapping the tooltip edge.
+  if hasAnchor and "tooltip.stem" in sk.atlas.entries:
     let
       anchorCenter = sk.tooltipAnchor.xy +
         vec2(sk.tooltipAnchor.w, sk.tooltipAnchor.h) * 0.5
+      stem = sk.atlas.entries["tooltip.stem"]
+      stemW = stem.width.float32
+      stemH = stem.height.float32
+      halfH = stemH * 0.5
+      uvPos = vec2(stem.x.float32, stem.y.float32)
+      uv0 = uvPos
+      uv1 = uvPos + vec2(stemW, 0)
+      uv2 = uvPos + vec2(stemW, stemH)
+      uv3 = uvPos + vec2(0, stemH)
+      colors = [fadeColor, fadeColor, fadeColor]
       dists = [
         abs(anchorCenter.y - sk.pos.y),
         abs(anchorCenter.y - (sk.pos.y + sk.size.y)),
@@ -1216,50 +1231,57 @@ template tooltip*(text: string) =
           if dists[idx] < dists[closest]:
             closest = idx
         closest
-      whiteUv = sk.atlas.entries[WhiteTileKey]
-      uv = vec2(whiteUv.x.float32, whiteUv.y.float32) +
-        vec2(
-          whiteUv.width.float32,
-          whiteUv.height.float32
-        ) * 0.5
-      uvs = [uv, uv, uv]
-      gray = (3.0 * fadeAlpha).uint8
-      col = rgbx(gray, gray, gray, fadeByte)
-      colors = [col, col, col]
-    var base, tip, perp: Vec2
-    if side <= 1:
-      let x = clamp(
-        anchorCenter.x,
-        sk.pos.x + Stem,
-        sk.pos.x + sk.size.x - Stem
-      )
-      if side == 0:
-        base = vec2(x, sk.pos.y + Inset)
-        tip = vec2(x, sk.pos.y - Stem)
-      else:
-        base = vec2(x, sk.pos.y + sk.size.y - Inset)
-        tip = vec2(x, sk.pos.y + sk.size.y + Stem)
-      perp = vec2(Stem, 0)
+    var
+      p0, p1, p2, p3: Vec2
+      t0, t1, t2, t3: Vec2
+    case side
+    of 0:
+      let
+        x = clamp(anchorCenter.x,
+          sk.pos.x + stemW * 0.5,
+          sk.pos.x + sk.size.x - stemW * 0.5)
+        cy = sk.pos.y + 1.0
+      p0 = vec2(x - stemW * 0.5, cy - halfH)
+      p1 = vec2(x + stemW * 0.5, cy - halfH)
+      p2 = vec2(x + stemW * 0.5, cy + halfH)
+      p3 = vec2(x - stemW * 0.5, cy + halfH)
+      t0 = uv3; t1 = uv2; t2 = uv1; t3 = uv0
+    of 1:
+      let
+        x = clamp(anchorCenter.x,
+          sk.pos.x + stemW * 0.5,
+          sk.pos.x + sk.size.x - stemW * 0.5)
+        cy = sk.pos.y + sk.size.y - 1.0
+      p0 = vec2(x - stemW * 0.5, cy - halfH)
+      p1 = vec2(x + stemW * 0.5, cy - halfH)
+      p2 = vec2(x + stemW * 0.5, cy + halfH)
+      p3 = vec2(x - stemW * 0.5, cy + halfH)
+      t0 = uv0; t1 = uv1; t2 = uv2; t3 = uv3
+    of 2:
+      let
+        y = clamp(anchorCenter.y,
+          sk.pos.y + stemW * 0.5,
+          sk.pos.y + sk.size.y - stemW * 0.5)
+        cx = sk.pos.x + 1.0
+      p0 = vec2(cx - halfH, y - stemW * 0.5)
+      p1 = vec2(cx + halfH, y - stemW * 0.5)
+      p2 = vec2(cx + halfH, y + stemW * 0.5)
+      p3 = vec2(cx - halfH, y + stemW * 0.5)
+      t0 = uv3; t1 = uv0; t2 = uv1; t3 = uv2
     else:
-      let y = clamp(
-        anchorCenter.y,
-        sk.pos.y + Stem,
-        sk.pos.y + sk.size.y - Stem
-      )
-      if side == 2:
-        base = vec2(sk.pos.x + Inset, y)
-        tip = vec2(sk.pos.x - Stem, y)
-      else:
-        base = vec2(sk.pos.x + sk.size.x - Inset, y)
-        tip = vec2(sk.pos.x + sk.size.x + Stem, y)
-      perp = vec2(0, Stem)
-    sk.drawTriangle(
-      [base - perp, base + perp, tip], uvs, colors
-    )
+      let
+        y = clamp(anchorCenter.y,
+          sk.pos.y + stemW * 0.5,
+          sk.pos.y + sk.size.y - stemW * 0.5)
+        cx = sk.pos.x + sk.size.x - 1.0
+      p0 = vec2(cx - halfH, y - stemW * 0.5)
+      p1 = vec2(cx + halfH, y - stemW * 0.5)
+      p2 = vec2(cx + halfH, y + stemW * 0.5)
+      p3 = vec2(cx - halfH, y + stemW * 0.5)
+      t0 = uv1; t1 = uv2; t2 = uv3; t3 = uv0
+    sk.drawTriangle([p0, p1, p2], [t0, t1, t2], colors)
+    sk.drawTriangle([p0, p2, p3], [t0, t2, t3], colors)
 
-  sk.draw9Patch(
-    "tooltip.9patch", 6, sk.pos, sk.size, fadeColor
-  )
   let
     baseColor = sk.theme.defaultTextColor
     textColor = rgbx(
