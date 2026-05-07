@@ -245,6 +245,12 @@ proc shouldShowTooltip*(sk: Silky): bool =
   ## Returns true when a tooltip should be shown.
   sk.hover and sk.mouseIdleTime >= sk.tooltipThreshold
 
+proc resetInteractions*(sk: Silky) =
+  ## Clear all interaction state.
+  sk.interactor.hotId = -1
+  sk.interactor.warmId = -1
+  sk.interactor.warmLayer = -1
+
 proc beginUiShared*(sk: Silky, window: Window, size: IVec2) =
   ## Starts a frame and updates the shared UI state.
   when defined(profile):
@@ -296,12 +302,10 @@ proc endInteractions(interactor: var Interactor) =
   interactor.warmLayer = -1
   interactor.currentId = -1
 
-proc resetInteractions*(sk: Silky) =
-  ## Clear all interaction state.
-  sk.interactor.hotId = -1
-
 proc endUiShared*(sk: Silky) =
   ## Ends a frame after the backend has finished drawing.
+  if sk.window.buttonReleased[MouseLeft]:
+    sk.resetInteractions()
   sk.interactor.endInteractions()
   sk.clear()
   sk.popLayout()
