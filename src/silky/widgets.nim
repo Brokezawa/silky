@@ -1153,39 +1153,33 @@ template tooltip*(text: string) =
     textSize = sk.getTextSize(sk.textStyle, tooltipText)
     pad = sk.theme.padding.float32
     tooltipSize = textSize + vec2(pad * 2, pad * 2)
+    root = sk.rootSize
     hasAnchor = sk.tooltipAnchor.w > 0 and
       sk.tooltipAnchor.h > 0
-    root = sk.rootSize
+    anchorCenter = sk.tooltipAnchor.xy +
+      vec2(sk.tooltipAnchor.w, sk.tooltipAnchor.h) * 0.5
 
-  # Position below anchor or offset from mouse.
+  # Position centered on anchor below, flip above if needed.
   var tooltipPos =
     if hasAnchor:
-      let
-        anchorCx = sk.tooltipAnchor.x +
-          sk.tooltipAnchor.w * 0.5
-        tx =
-          if tooltipSize.x > sk.tooltipAnchor.w * 2:
-            anchorCx - pad
-          else:
-            anchorCx - tooltipSize.x * 0.5
-      vec2(tx, sk.tooltipAnchor.y + sk.tooltipAnchor.h + 8)
+      vec2(
+        anchorCenter.x - tooltipSize.x * 0.5,
+        sk.tooltipAnchor.y + sk.tooltipAnchor.h + 8
+      )
     else:
       sk.mousePos + vec2(16, 16)
   tooltipPos += sk.tooltipOffset
-  let unclamped = tooltipPos
-
-  # Clamp to window bounds.
-  if tooltipPos.x + tooltipSize.x > root.x:
-    tooltipPos.x = root.x - tooltipSize.x - pad
   if tooltipPos.y + tooltipSize.y > root.y:
-    tooltipPos.y = unclamped.y - tooltipSize.y - 4
-  tooltipPos.x = max(tooltipPos.x, pad)
-  tooltipPos.y = max(tooltipPos.y, pad)
+    tooltipPos.y = sk.tooltipAnchor.y - tooltipSize.y - 8
+  if tooltipSize.x <= root.x:
+    tooltipPos.x = clamp(
+      tooltipPos.x, pad, root.x - tooltipSize.x - pad)
+  if tooltipSize.y <= root.y:
+    tooltipPos.y = max(tooltipPos.y, pad)
 
-  # Reset position and fade when anchor changes.
-  let anchorChanged =
-    sk.tooltipAnchor != sk.tooltipLastAnchor
-  if not sk.tooltipActive or anchorChanged:
+  # Reset fade when anchor changes.
+  if not sk.tooltipActive or
+      sk.tooltipAnchor != sk.tooltipLastAnchor:
     sk.tooltipPos = tooltipPos
     sk.tooltipFadeInTime = 0
   sk.tooltipLastAnchor = sk.tooltipAnchor
@@ -1199,16 +1193,13 @@ template tooltip*(text: string) =
     fadeByte = (255.0 * fadeAlpha).uint8
     fadeColor = rgbx(fadeByte, fadeByte, fadeByte, fadeByte)
   sk.pushLayout(sk.tooltipPos, tooltipSize)
-
   sk.draw9Patch(
     "tooltip.9patch", 6, sk.pos, sk.size, fadeColor
   )
 
-  # Draw stem on top of background, overlapping the tooltip edge.
+  # Draw stem on top, pointing toward anchor.
   if hasAnchor and "tooltip.stem" in sk.atlas.entries:
     let
-      anchorCenter = sk.tooltipAnchor.xy +
-        vec2(sk.tooltipAnchor.w, sk.tooltipAnchor.h) * 0.5
       stem = sk.atlas.entries["tooltip.stem"]
       stemW = stem.width.float32
       stemH = stem.height.float32
@@ -1219,66 +1210,21 @@ template tooltip*(text: string) =
       uv2 = uvPos + vec2(stemW, stemH)
       uv3 = uvPos + vec2(0, stemH)
       colors = [fadeColor, fadeColor, fadeColor]
-      dists = [
-        abs(anchorCenter.y - sk.pos.y),
-        abs(anchorCenter.y - (sk.pos.y + sk.size.y)),
-        abs(anchorCenter.x - sk.pos.x),
-        abs(anchorCenter.x - (sk.pos.x + sk.size.x))
-      ]
-      side = block:
-        var closest = 0
-        for idx in 1 .. 3:
-          if dists[idx] < dists[closest]:
-            closest = idx
-        closest
-    var
-      p0, p1, p2, p3: Vec2
-      t0, t1, t2, t3: Vec2
-    case side
-    of 0:
-      let
-        x = clamp(anchorCenter.x,
-          sk.pos.x + stemW * 0.5,
-          sk.pos.x + sk.size.x - stemW * 0.5)
-        cy = sk.pos.y + 1.0
+      above = anchorCenter.y < sk.pos.y + sk.size.y * 0.5
+      x = clamp(anchorCenter.x,
+        sk.pos.x + stemW * 0.5,
+        sk.pos.x + sk.size.x - stemW * 0.5)
+      cy =
+        if above: sk.pos.y + 1.0
+        else: sk.pos.y + sk.size.y - 1.0
       p0 = vec2(x - stemW * 0.5, cy - halfH)
       p1 = vec2(x + stemW * 0.5, cy - halfH)
       p2 = vec2(x + stemW * 0.5, cy + halfH)
       p3 = vec2(x - stemW * 0.5, cy + halfH)
-      t0 = uv3; t1 = uv2; t2 = uv1; t3 = uv0
-    of 1:
-      let
-        x = clamp(anchorCenter.x,
-          sk.pos.x + stemW * 0.5,
-          sk.pos.x + sk.size.x - stemW * 0.5)
-        cy = sk.pos.y + sk.size.y - 1.0
-      p0 = vec2(x - stemW * 0.5, cy - halfH)
-      p1 = vec2(x + stemW * 0.5, cy - halfH)
-      p2 = vec2(x + stemW * 0.5, cy + halfH)
-      p3 = vec2(x - stemW * 0.5, cy + halfH)
-      t0 = uv0; t1 = uv1; t2 = uv2; t3 = uv3
-    of 2:
-      let
-        y = clamp(anchorCenter.y,
-          sk.pos.y + stemW * 0.5,
-          sk.pos.y + sk.size.y - stemW * 0.5)
-        cx = sk.pos.x + 1.0
-      p0 = vec2(cx - halfH, y - stemW * 0.5)
-      p1 = vec2(cx + halfH, y - stemW * 0.5)
-      p2 = vec2(cx + halfH, y + stemW * 0.5)
-      p3 = vec2(cx - halfH, y + stemW * 0.5)
-      t0 = uv3; t1 = uv0; t2 = uv1; t3 = uv2
-    else:
-      let
-        y = clamp(anchorCenter.y,
-          sk.pos.y + stemW * 0.5,
-          sk.pos.y + sk.size.y - stemW * 0.5)
-        cx = sk.pos.x + sk.size.x - 1.0
-      p0 = vec2(cx - halfH, y - stemW * 0.5)
-      p1 = vec2(cx + halfH, y - stemW * 0.5)
-      p2 = vec2(cx + halfH, y + stemW * 0.5)
-      p3 = vec2(cx - halfH, y + stemW * 0.5)
-      t0 = uv1; t1 = uv2; t2 = uv3; t3 = uv0
+      t0 = if above: uv3 else: uv0
+      t1 = if above: uv2 else: uv1
+      t2 = if above: uv1 else: uv2
+      t3 = if above: uv0 else: uv3
     sk.drawTriangle([p0, p1, p2], [t0, t1, t2], colors)
     sk.drawTriangle([p0, p2, p3], [t0, t2, t3], colors)
 
