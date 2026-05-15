@@ -547,9 +547,11 @@ template iconButton*(image: string, body) =
   case interaction
   of Hovered:
     sk.hover = true
+    sk.tooltipAnchor = buttonRect
     patch = "button.hover.9patch"
   of Pressed, Held:
     sk.hover = true
+    sk.tooltipAnchor = buttonRect
     patch = "button.down.9patch"
   of Released:
     sk.hover = false
@@ -583,6 +585,8 @@ template clickableIcon*(image: string, on: bool, body) =
       offColor
 
   sk.hover = interaction in [Hovered, Pressed, Held]
+  if sk.hover:
+    sk.tooltipAnchor = iconRect
 
   if interaction == Pressed:
     body

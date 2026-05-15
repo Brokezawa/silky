@@ -38,7 +38,6 @@ makeContextCurrent(window)
 loadExtensions()
 
 let sk = newSilky(window, "tests/dist/atlas.png")
-sk.tooltipThreshold = 0
 
 proc hoverBox(pos: Vec2, size: Vec2, label: string, tip: string) =
   ## Draw a labeled box that shows a tooltip when hovered.

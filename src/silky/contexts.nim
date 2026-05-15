@@ -110,7 +110,7 @@ type
     tooltipFadeInDuration*: float64 = 0.25
     framebufferSize*: IVec2
     lastMousePos*: Vec2
-    tooltipThreshold*: float64 = 0.5
+    tooltipThreshold*: float64 = 0
     atlas*: SilkyAtlas
     image*: Image
     drawer*: Drawer
