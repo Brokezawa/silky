@@ -284,6 +284,13 @@ type
     mouseConsumed*: bool = false
     hover*: bool = false
     showTooltip*: bool = false
+    tooltipActive*: bool = false
+    tooltipPos*: Vec2
+    tooltipAnchor*: Rect
+    tooltipLastAnchor*: Rect
+    tooltipOffset*: Vec2
+    tooltipFadeInTime*: float64
+    tooltipFadeInDuration*: float64 = 0.25
     framebufferSize*: IVec2
     lastMousePos*: Vec2
     tooltipThreshold*: float64 = 0.5
@@ -447,6 +454,9 @@ proc drawRect*(sk: Silky, pos: Vec2, size: Vec2, color: ColorRGBX) {.inline.} =
   ## Stub for drawing a solid rectangle.
   discard
 
+proc drawTriangle*(sk: Silky, positions: array[3, Vec2], uvs: array[3, Vec2], colors: array[3, ColorRGBX]) {.inline.} =
+  discard
+
 proc draw9Patch*(sk: Silky, name: string, patch: int, pos: Vec2, size: Vec2, color = rgbx(255, 255, 255, 255)) {.inline.} =
   ## Stub for drawing a 9-patch image.
   discard
@@ -497,6 +507,7 @@ proc newSilky*(window: Window, atlasPngPath: string): Silky =
 
 proc beginUi*(sk: Silky, window: auto, size: IVec2) =
   ## Begins a new UI frame.
+  sk.tooltipActive = sk.showTooltip
   sk.showTooltip = false
   sk.framebufferSize = size
   sk.mousePos = window.mousePos.vec2 / sk.uiScale

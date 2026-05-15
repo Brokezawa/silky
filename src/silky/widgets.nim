@@ -547,9 +547,11 @@ template iconButton*(image: string, body) =
   case interaction
   of Hovered:
     sk.hover = true
+    sk.tooltipAnchor = buttonRect
     patch = "button.hover.9patch"
   of Pressed, Held:
     sk.hover = true
+    sk.tooltipAnchor = buttonRect
     patch = "button.down.9patch"
   of Released:
     sk.hover = false
@@ -583,6 +585,8 @@ template clickableIcon*(image: string, on: bool, body) =
       offColor
 
   sk.hover = interaction in [Hovered, Pressed, Held]
+  if sk.hover:
+    sk.tooltipAnchor = iconRect
 
   if interaction == Pressed:
     body
@@ -1144,33 +1148,102 @@ template menuItem*(label: string, body: untyped) =
     sk.menuItemEnd(ctx)
 
 template tooltip*(text: string) =
-  ## Display a tooltip at the mouse cursor.
-  ## This should be called after a widget when sk.showTooltip is true.
+  ## Draws a tooltip with fade-in and stem image.
   let tooltipText = text
   sk.pushLayer(PopupsLayer)
   sk.pushRawClipRect(rect(vec2(0, 0), sk.rootSize))
 
-  let textSize = sk.getTextSize(sk.textStyle, tooltipText)
-  let tooltipSize = textSize + vec2(sk.theme.padding.float32 * 2, sk.theme.padding.float32 * 2)
-  let mousePos = sk.mousePos
+  let
+    textSize = sk.getTextSize(sk.textStyle, tooltipText)
+    pad = sk.theme.padding.float32
+    tooltipSize = textSize + vec2(pad * 2, pad * 2)
+    root = sk.rootSize
+    hasAnchor = sk.tooltipAnchor.w > 0 and
+      sk.tooltipAnchor.h > 0
+    anchorCenter = sk.tooltipAnchor.xy +
+      vec2(sk.tooltipAnchor.w, sk.tooltipAnchor.h) * 0.5
 
-  # Position tooltip near mouse, offset slightly to avoid cursor.
-  var tooltipPos = mousePos + vec2(16, 16)
-
-  # Keep tooltip on screen.
-  let root = sk.rootSize
-  if tooltipPos.x + tooltipSize.x > root.x:
-    tooltipPos.x = root.x - tooltipSize.x - sk.theme.padding.float32
+  # Position centered on anchor below, flip above if needed.
+  var tooltipPos =
+    if hasAnchor:
+      vec2(
+        anchorCenter.x - tooltipSize.x * 0.5,
+        sk.tooltipAnchor.y + sk.tooltipAnchor.h + 8
+      )
+    else:
+      sk.mousePos + vec2(16, 16)
+  tooltipPos += sk.tooltipOffset
   if tooltipPos.y + tooltipSize.y > root.y:
-    tooltipPos.y = mousePos.y - tooltipSize.y - 4
+    tooltipPos.y = sk.tooltipAnchor.y - tooltipSize.y - 8
+  if tooltipSize.x <= root.x:
+    tooltipPos.x = clamp(
+      tooltipPos.x, pad, root.x - tooltipSize.x - pad)
+  if tooltipSize.y <= root.y:
+    tooltipPos.y = max(tooltipPos.y, pad)
 
-  # Ensure tooltip doesn't go off-screen left or top.
-  tooltipPos.x = max(tooltipPos.x, sk.theme.padding.float32)
-  tooltipPos.y = max(tooltipPos.y, sk.theme.padding.float32)
+  # Reset fade when anchor changes.
+  if not sk.tooltipActive or
+      sk.tooltipAnchor != sk.tooltipLastAnchor:
+    sk.tooltipPos = tooltipPos
+    sk.tooltipFadeInTime = 0
+  sk.tooltipLastAnchor = sk.tooltipAnchor
+  sk.showTooltip = true
 
-  sk.pushLayout(tooltipPos, tooltipSize)
-  sk.draw9Patch("tooltip.9patch", 6, sk.pos, sk.size)
-  discard sk.drawText(sk.textStyle, tooltipText, sk.pos + vec2(sk.theme.padding), sk.theme.defaultTextColor)
+  let
+    fadeAlpha = clamp(
+      sk.tooltipFadeInTime / sk.tooltipFadeInDuration,
+      0.0, 1.0
+    ).float32
+    fadeByte = (255.0 * fadeAlpha).uint8
+    fadeColor = rgbx(fadeByte, fadeByte, fadeByte, fadeByte)
+  sk.pushLayout(sk.tooltipPos, tooltipSize)
+  sk.draw9Patch(
+    "tooltip.9patch", 6, sk.pos, sk.size, fadeColor
+  )
+
+  # Draw stem on top, pointing toward anchor.
+  if hasAnchor and "tooltip.stem" in sk.atlas.entries:
+    let
+      stem = sk.atlas.entries["tooltip.stem"]
+      stemW = stem.width.float32
+      stemH = stem.height.float32
+      halfH = stemH * 0.5
+      uvPos = vec2(stem.x.float32, stem.y.float32)
+      uv0 = uvPos
+      uv1 = uvPos + vec2(stemW, 0)
+      uv2 = uvPos + vec2(stemW, stemH)
+      uv3 = uvPos + vec2(0, stemH)
+      colors = [fadeColor, fadeColor, fadeColor]
+      above = anchorCenter.y < sk.pos.y + sk.size.y * 0.5
+      x = clamp(anchorCenter.x,
+        sk.pos.x + stemW * 0.5,
+        sk.pos.x + sk.size.x - stemW * 0.5)
+      cy =
+        if above: sk.pos.y + 1.0
+        else: sk.pos.y + sk.size.y - 1.0
+      p0 = vec2(x - stemW * 0.5, cy - halfH)
+      p1 = vec2(x + stemW * 0.5, cy - halfH)
+      p2 = vec2(x + stemW * 0.5, cy + halfH)
+      p3 = vec2(x - stemW * 0.5, cy + halfH)
+      t0 = if above: uv3 else: uv0
+      t1 = if above: uv2 else: uv1
+      t2 = if above: uv1 else: uv2
+      t3 = if above: uv0 else: uv3
+    sk.drawTriangle([p0, p1, p2], [t0, t1, t2], colors)
+    sk.drawTriangle([p0, p2, p3], [t0, t2, t3], colors)
+
+  let
+    baseColor = sk.theme.defaultTextColor
+    textColor = rgbx(
+      (baseColor.r.float32 * fadeAlpha).uint8,
+      (baseColor.g.float32 * fadeAlpha).uint8,
+      (baseColor.b.float32 * fadeAlpha).uint8,
+      (baseColor.a.float32 * fadeAlpha).uint8,
+    )
+  discard sk.drawText(
+    sk.textStyle, tooltipText,
+    sk.pos + vec2(sk.theme.padding), textColor
+  )
   sk.popLayout()
 
   sk.popClipRect()

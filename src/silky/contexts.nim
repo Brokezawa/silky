@@ -101,9 +101,16 @@ type
     mouseConsumed*: bool = false
     hover*: bool = false
     showTooltip*: bool = false
+    tooltipActive*: bool = false
+    tooltipPos*: Vec2
+    tooltipAnchor*: Rect
+    tooltipLastAnchor*: Rect
+    tooltipOffset*: Vec2
+    tooltipFadeInTime*: float64
+    tooltipFadeInDuration*: float64 = 0.25
     framebufferSize*: IVec2
     lastMousePos*: Vec2
-    tooltipThreshold*: float64 = 0.5
+    tooltipThreshold*: float64 = 0
     atlas*: SilkyAtlas
     image*: Image
     drawer*: Drawer
@@ -257,6 +264,7 @@ proc beginUiShared*(sk: Silky, window: Window, size: IVec2) =
         createDir("tmp")
         dumpMeasures("tmp/trace.json")
 
+  sk.tooltipActive = sk.showTooltip
   sk.showTooltip = false
   sk.mouseConsumed = false
   sk.framebufferSize = size
@@ -277,7 +285,11 @@ proc beginUiShared*(sk: Silky, window: Window, size: IVec2) =
   else:
     sk.mouseIdleTime += deltaTime
 
-  sk.showTooltip = false
+  if sk.tooltipActive:
+    sk.tooltipFadeInTime += deltaTime
+  else:
+    sk.tooltipFadeInTime = 0
+
   measurePush("frame")
   sk.pushClipRect(rect(0, 0, sk.size.x, sk.size.y))
 
@@ -410,7 +422,8 @@ proc drawTriangle*(
       uv: uvs[i],
       color: colors[i],
       clipPos: cPos,
-      clipSize: cSize
+      clipSize: cSize,
+      maskUv: vec2(-1, -1)
     ))
 
 proc drawText*(
@@ -602,11 +615,14 @@ proc getTextSize*(sk: Silky, font: string, text: string): Vec2 =
   let
     fontData = sk.atlas.fonts[font]
     runedText = text.toRunes
-  var currentPos = vec2(0, fontData.lineHeight)
+  var
+    currentPos = vec2(0, fontData.lineHeight)
+    maxWidth = 0.0'f
 
   for i in 0 ..< runedText.len:
     let rune = runedText[i]
     if rune == Rune(10):
+      maxWidth = max(maxWidth, currentPos.x)
       currentPos.x = 0
       currentPos.y += fontData.lineHeight
       continue
@@ -626,7 +642,8 @@ proc getTextSize*(sk: Silky, font: string, text: string): Vec2 =
       if nextGlyphStr in entry.kerning:
         currentPos.x += entry.kerning[nextGlyphStr]
 
-  currentPos
+  maxWidth = max(maxWidth, currentPos.x)
+  vec2(maxWidth, currentPos.y)
 
 proc newSilky*(
   window: Window,
