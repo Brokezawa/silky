@@ -3,12 +3,22 @@ when not defined(windows):
 
 import
   pixie, vmath, windy,
-  pkg/dx12, pkg/dx12/context,
-  silky/drawers/shader
-from shady import toHLSL, shaderVertex, shaderFragment
+  pkg/dx12, pkg/dx12/context
+
+when not defined(shadyBinaryShaders):
+  import std/os, silky/drawers/shader
+  from shady import compileHlslShader, toHLSL, shaderVertex, shaderFragment
 
 const
   InitialVertexCapacity = 4096
+
+when not defined(shadyBinaryShaders):
+  const
+    ShaderDir = currentSourcePath().parentDir / "shaders"
+    VertexHlslPath = ShaderDir / "silky.vert.hlsl"
+    PixelHlslPath = ShaderDir / "silky.frag.hlsl"
+    VertexCsoPath = ShaderDir / "silky.vs.cso"
+    PixelCsoPath = ShaderDir / "silky.ps.cso"
 
 type
   DrawerVertex* {.packed.} = object
@@ -42,6 +52,12 @@ type
 proc clampViewport(size: IVec2): IVec2 =
   ## Clamps the viewport to valid swap-chain dimensions.
   ivec2(max(1'i32, size.x), max(1'i32, size.y))
+
+proc shaderBytecode(code: string): D3D12_SHADER_BYTECODE =
+  D3D12_SHADER_BYTECODE(
+    pShaderBytecode: unsafeAddr code[0],
+    BytecodeLength: csize_t(code.len)
+  )
 
 proc createVertexBuffer(state: Drawer, maxVertexCount: int) =
   ## Creates or replaces the persistently mapped upload vertex buffer.
@@ -257,12 +273,41 @@ proc uploadTexture(state: Drawer, image: Image) =
 
 proc initRenderer(state: Drawer, image: Image, size: IVec2) =
   ## Creates the DX12 pipeline, upload buffers, and atlas texture.
+  when defined(shadyBinaryShaders):
+    const
+      vertexShaderCode = staticRead("shaders/silky.vs.cso")
+      pixelShaderCode = staticRead("shaders/silky.ps.cso")
+  else:
+    const
+      vertexShaderSrc = toHLSL(silkyVert, shaderVertex)
+      pixelShaderSrc = toHLSL(silkyFrag, shaderFragment)
+      vertexShaderCode = compileHlslShader(
+        vertexShaderSrc,
+        VertexHlslPath,
+        VertexCsoPath,
+        "VSMain",
+        "vs_6_0"
+      )
+      pixelShaderCode = compileHlslShader(
+        pixelShaderSrc,
+        PixelHlslPath,
+        PixelCsoPath,
+        "PSMain",
+        "ps_6_0"
+      )
   let
     safeSize = clampViewport(size)
-    vertexShaderSrc = toHLSL(silkyVert, shaderVertex)
-    pixelShaderSrc = toHLSL(silkyFrag, shaderFragment)
-    vsBlob = compileShader(vertexShaderSrc, "VSMain", "vs_5_0")
-    psBlob = compileShader(pixelShaderSrc, "PSMain", "ps_5_0")
+
+  when defined(shadyBinaryShaders):
+    let
+      vsBytecode = shaderBytecode(vertexShaderCode)
+      psBytecode = shaderBytecode(pixelShaderCode)
+  else:
+    let
+      vsBlob = compileShader(vertexShaderSrc, "VSMain", "vs_5_0")
+      psBlob = compileShader(pixelShaderSrc, "PSMain", "ps_5_0")
+      vsBytecode = shaderBytecode(vsBlob)
+      psBytecode = shaderBytecode(psBlob)
 
   var range = D3D12_DESCRIPTOR_RANGE(
     RangeType: D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
@@ -410,8 +455,8 @@ proc initRenderer(state: Drawer, image: Image, size: IVec2) =
 
   var psoDesc = D3D12_GRAPHICS_PIPELINE_STATE_DESC(
     pRootSignature: state.rootSignature,
-    VS: shaderBytecode(vsBlob),
-    PS: shaderBytecode(psBlob),
+    VS: vsBytecode,
+    PS: psBytecode,
     StreamOutput: D3D12_STREAM_OUTPUT_DESC(),
     BlendState: blendDesc,
     SampleMask: D3D12_DEFAULT_SAMPLE_MASK,
@@ -456,8 +501,9 @@ proc initRenderer(state: Drawer, image: Image, size: IVec2) =
     addr psoDesc
   )
 
-  release(vsBlob)
-  release(psBlob)
+  when not defined(shadyBinaryShaders):
+    release(vsBlob)
+    release(psBlob)
 
   state.viewportSize = safeSize
   state.createVertexBuffer(InitialVertexCapacity)

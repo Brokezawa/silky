@@ -5,8 +5,22 @@ import
   pixie, vmath, windy
 import pkg/vk14 except Window
 
+when not defined(shadyBinaryShaders):
+  import std/os, shady, silky/drawers/shader
+
 const
   InitialVertexCapacity = 4096
+
+when not defined(shadyBinaryShaders):
+  const
+    ShaderDir = currentSourcePath().parentDir / "shaders"
+    VertexGlslPath = ShaderDir / "silky.vert"
+    FragmentGlslPath = ShaderDir / "silky.frag"
+    VertexSpvPath = ShaderDir / "silky.vert.spv"
+    FragmentSpvPath = ShaderDir / "silky.frag.spv"
+
+const
+  ShaderUniformFloatCount = 4
 
 type
   DrawerVertex* {.packed.} = object
@@ -49,23 +63,6 @@ type
 
 proc clampViewport(size: IVec2): IVec2 =
   ivec2(max(1'i32, size.x), max(1'i32, size.y))
-
-proc normalizeVertices(
-  vertices: var seq[DrawerVertex],
-  viewportSize: IVec2,
-  atlasSize: Vec2
-) =
-  let
-    width = max(1.0'f, viewportSize.x.float32)
-    height = max(1.0'f, viewportSize.y.float32)
-  for i in 0 ..< vertices.len:
-    let p = vertices[i].pos
-    vertices[i].pos = vec2(
-      (p.x / width) * 2.0'f - 1.0'f,
-      (p.y / height) * 2.0'f - 1.0'f
-    )
-    vertices[i].uv = vertices[i].uv / atlasSize
-    vertices[i].maskUv = vertices[i].maskUv / atlasSize
 
 proc requiresSwapChainRecreate(vkResult: VkResult): bool =
   let code = vkResult.int32
@@ -446,9 +443,24 @@ proc createRenderPass(ctx: VulkanContext, renderer: var VkRenderer) =
     "Creating render pass")
 
 proc createGraphicsPipeline(ctx: VulkanContext, renderer: var VkRenderer) =
-  const
-    vertShaderCode = staticRead("shaders/silky.vert.spv")
-    fragShaderCode = staticRead("shaders/silky.frag.spv")
+  when defined(shadyBinaryShaders):
+    const
+      vertShaderCode = staticRead("shaders/silky.vert.spv")
+      fragShaderCode = staticRead("shaders/silky.frag.spv")
+  else:
+    const
+      vertShaderCode = compileSpirvShader(
+        toShader(silkyVert, vulkanGlsl450, shaderVertex),
+        VertexGlslPath,
+        VertexSpvPath,
+        binaryVertex
+      )
+      fragShaderCode = compileSpirvShader(
+        toShader(silkyFrag, vulkanGlsl450, shaderFragment),
+        FragmentGlslPath,
+        FragmentSpvPath,
+        binaryFragment
+      )
   let
     vertModule = createShaderModule(ctx.device, vertShaderCode)
     fragModule = createShaderModule(ctx.device, fragShaderCode)
@@ -542,7 +554,7 @@ proc createGraphicsPipeline(ctx: VulkanContext, renderer: var VkRenderer) =
       pushConstantRange = VkPushConstantRange(
         stageFlags: VkShaderStageFlags(VK_SHADER_STAGE_VERTEX_BIT),
         offset: 0,
-        size: uint32(sizeof(Vec2)))
+        size: uint32(ShaderUniformFloatCount * sizeof(float32)))
       pipelineLayoutInfo = VkPipelineLayoutCreateInfo(
         sType: VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         setLayoutCount: 1,
@@ -739,7 +751,6 @@ proc endFrame*(
   let quadsArr = cast[ptr UncheckedArray[DrawerVertex]](quads)
   for i in 0 ..< quadCount:
     vertices.add(quadsArr[i])
-  vertices.normalizeVertices(drawer.viewportSize, atlasSize)
 
   if vertexCount > 0:
     copyMem(drawer.renderer.vertexBufferPtr,
@@ -784,8 +795,12 @@ proc endFrame*(
   var vertexBuffers = [drawer.renderer.vertexBuffer]
   var offsets = [VkDeviceSize(0)]
   var descriptorSet = drawer.renderer.descriptorSet
-  var viewportSizePush = vec2(
-    safeSize.x.float32, safeSize.y.float32)
+  var shaderUniforms = [
+    safeSize.x.float32,
+    safeSize.y.float32,
+    atlasSize.x,
+    atlasSize.y
+  ]
 
   vkCmdBeginRenderPass(
     commandBuffer, renderPassInfo.addr, VK_SUBPASS_CONTENTS_INLINE)
@@ -799,7 +814,8 @@ proc endFrame*(
   vkCmdPushConstants(
     commandBuffer, drawer.renderer.pipelineLayout,
     VkShaderStageFlags(VK_SHADER_STAGE_VERTEX_BIT),
-    0, uint32(sizeof(Vec2)), viewportSizePush.addr)
+    0, uint32(ShaderUniformFloatCount * sizeof(float32)),
+    shaderUniforms.addr)
   vkCmdBindVertexBuffers(
     commandBuffer, 0, 1, vertexBuffers[0].addr, offsets[0].addr)
   if vertexCount > 0:
