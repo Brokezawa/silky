@@ -35,7 +35,7 @@ block:
 
 block:
   let vertex = toHLSL(silkyVert, shaderVertex)
-  doAssert "cbuffer ShadyUniforms : register(b0)" in vertex
+  doAssert "cbuffer ShadyUniforms0 : register(b0)" in vertex
   doAssert "float2 viewportSize;" in vertex
   doAssert "float2 atlasSize;" in vertex
   doAssert "float2 pos : POSITION0" in vertex
@@ -45,7 +45,9 @@ block:
   let fragment = toHLSL(silkyFrag, shaderFragment)
   doAssert "Texture2D<float4> atlasSampler : register(t0);" in fragment
   doAssert "SamplerState atlasSamplerSampler : register(s0);" in fragment
-  doAssert "float4 gl_FragCoord : SV_POSITION" in fragment
+  doAssert "struct PSInput" in fragment
+  doAssert "float4 pos : SV_POSITION;" in fragment
+  doAssert "float4 PSMain(PSInput input) : SV_TARGET" in fragment
   doAssert "atlasSampler.Sample(atlasSamplerSampler, fragmentUv)" in fragment
   doAssert "(atlasSampler.Sample(atlasSamplerSampler, fragmentMaskUv)).r" in fragment
   doAssert "lerp(float3(1.0, 1.0, 1.0), fragmentColor.rgb, maskR)" in fragment

@@ -1,7 +1,7 @@
 // target hlsl dx12
 // from silkyVert
 
-cbuffer ShadyUniforms : register(b0) {
+cbuffer ShadyUniforms0 : register(b0) {
   float2 viewportSize;
   float2 atlasSize;
 };

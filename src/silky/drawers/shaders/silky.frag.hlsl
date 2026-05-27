@@ -5,15 +5,23 @@ Texture2D<float4> atlasSampler : register(t0);
 SamplerState atlasSamplerSampler : register(s0);
 
 
-float4 PSMain(
-  float4 gl_FragCoord : SV_POSITION,
-  float2 fragmentUv : TEXCOORD0,
-  float4 fragmentColor : COLOR0,
-  float2 fragmentClipPos : TEXCOORD1,
-  float2 fragmentClipSize : TEXCOORD2,
-  float2 fragmentPos : TEXCOORD3,
-  float2 fragmentMaskUv : TEXCOORD4
-) : SV_TARGET {
+struct PSInput {
+  float4 pos : SV_POSITION;
+  float2 fragmentUv : TEXCOORD0;
+  float4 fragmentColor : COLOR0;
+  float2 fragmentClipPos : TEXCOORD1;
+  float2 fragmentClipSize : TEXCOORD2;
+  float2 fragmentPos : TEXCOORD3;
+  float2 fragmentMaskUv : TEXCOORD4;
+};
+
+float4 PSMain(PSInput input) : SV_TARGET {
+  float2 fragmentUv = input.fragmentUv;
+  float4 fragmentColor = input.fragmentColor;
+  float2 fragmentClipPos = input.fragmentClipPos;
+  float2 fragmentClipSize = input.fragmentClipSize;
+  float2 fragmentPos = input.fragmentPos;
+  float2 fragmentMaskUv = input.fragmentMaskUv;
   float4 fragColor = float4(0.0, 0.0, 0.0, 0.0);
   if ((((fragmentPos.x < fragmentClipPos.x) || (fragmentPos.y < fragmentClipPos.y)) || (fragmentClipPos.x + fragmentClipSize.x < fragmentPos.x)) || (fragmentClipPos.y + fragmentClipSize.y < fragmentPos.y)) {
     discard;
