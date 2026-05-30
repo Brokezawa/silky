@@ -5,8 +5,20 @@ import
   pixie, vmath, windy,
   pkg/dx12, pkg/dx12/context
 
+when not defined(shadyBinaryShaders):
+  import std/os, silky/drawers/shader
+  from shady import compileHlslShader, toHLSL, shaderVertex, shaderFragment
+
 const
   InitialVertexCapacity = 4096
+
+when not defined(shadyBinaryShaders):
+  const
+    ShaderDir = currentSourcePath().parentDir / "shaders"
+    VertexHlslPath = ShaderDir / "silky.vert.hlsl"
+    PixelHlslPath = ShaderDir / "silky.frag.hlsl"
+    VertexCsoPath = ShaderDir / "silky.vs.cso"
+    PixelCsoPath = ShaderDir / "silky.ps.cso"
 
 type
   DrawerVertex* {.packed.} = object
@@ -32,7 +44,7 @@ type
     vertexBufferPtr: pointer
     maxVertexCount: int
     viewportSize: IVec2
-    clearColor: array[4, FLOAT]
+    clearColor: array[4, float32]
     layers*: array[2, seq[DrawerVertex]]
     currentLayer*: int
     layerStack*: seq[int]
@@ -41,23 +53,11 @@ proc clampViewport(size: IVec2): IVec2 =
   ## Clamps the viewport to valid swap-chain dimensions.
   ivec2(max(1'i32, size.x), max(1'i32, size.y))
 
-proc normalizeVertices(
-  vertices: var seq[DrawerVertex],
-  viewportSize: IVec2,
-  atlasSize: Vec2
-) =
-  ## Converts queued pixel-space vertices to clip-space and normalized UVs.
-  let
-    width = max(1.0'f, viewportSize.x.float32)
-    height = max(1.0'f, viewportSize.y.float32)
-  for i in 0 ..< vertices.len:
-    let p = vertices[i].pos
-    vertices[i].pos = vec2(
-      (p.x / width) * 2.0'f - 1.0'f,
-      1.0'f - (p.y / height) * 2.0'f
-    )
-    vertices[i].uv = vertices[i].uv / atlasSize
-    vertices[i].maskUv = vertices[i].maskUv / atlasSize
+proc shaderBytecode(code: string): D3D12_SHADER_BYTECODE =
+  D3D12_SHADER_BYTECODE(
+    pShaderBytecode: unsafeAddr code[0],
+    BytecodeLength: csize_t(code.len)
+  )
 
 proc createVertexBuffer(state: Drawer, maxVertexCount: int) =
   ## Creates or replaces the persistently mapped upload vertex buffer.
@@ -67,7 +67,7 @@ proc createVertexBuffer(state: Drawer, maxVertexCount: int) =
     state.vertexBuffer = nil
     state.vertexBufferPtr = nil
 
-  let vertexBufferSize = UINT64(maxVertexCount * sizeof(DrawerVertex))
+  let vertexBufferSize = uint64(maxVertexCount * sizeof(DrawerVertex))
 
   var bufferDesc: D3D12_RESOURCE_DESC
   zeroMem(addr bufferDesc, sizeof(bufferDesc))
@@ -140,8 +140,8 @@ proc uploadTexture(state: Drawer, image: Image) =
 
   var footprint = D3D12_PLACED_SUBRESOURCE_FOOTPRINT()
   var numRows: uint32
-  var rowSize: UINT64
-  var totalBytes: UINT64
+  var rowSize: uint64
+  var totalBytes: uint64
   state.ctx.device.getCopyableFootprints(
     addr texDesc,
     0,
@@ -273,70 +273,41 @@ proc uploadTexture(state: Drawer, image: Image) =
 
 proc initRenderer(state: Drawer, image: Image, size: IVec2) =
   ## Creates the DX12 pipeline, upload buffers, and atlas texture.
-  const vertexShaderSrc = """
-struct VSInput {
-  float2 pos : POSITION;
-  float2 uv : TEXCOORD0;
-  float4 color : COLOR0;
-  float2 clipPos : TEXCOORD1;
-  float2 clipSize : TEXCOORD2;
-  float2 maskUv : TEXCOORD3;
-};
-
-struct PSInput {
-  float4 pos : SV_POSITION;
-  float2 uv : TEXCOORD0;
-  float4 color : COLOR0;
-  float2 clipPos : TEXCOORD1;
-  float2 clipSize : TEXCOORD2;
-  float2 maskUv : TEXCOORD3;
-};
-
-PSInput VSMain(VSInput input) {
-  PSInput output;
-  output.pos = float4(input.pos, 0.0f, 1.0f);
-  output.uv = input.uv;
-  output.color = input.color;
-  output.clipPos = input.clipPos;
-  output.clipSize = input.clipSize;
-  output.maskUv = input.maskUv;
-  return output;
-}
-"""
-
-  const pixelShaderSrc = """
-Texture2D tex0 : register(t0);
-SamplerState samp0 : register(s0);
-
-struct PSInput {
-  float4 pos : SV_POSITION;
-  float2 uv : TEXCOORD0;
-  float4 color : COLOR0;
-  float2 clipPos : TEXCOORD1;
-  float2 clipSize : TEXCOORD2;
-  float2 maskUv : TEXCOORD3;
-};
-
-float4 PSMain(PSInput input) : SV_TARGET {
-  if (input.pos.x < input.clipPos.x ||
-      input.pos.y < input.clipPos.y ||
-      input.pos.x > input.clipPos.x + input.clipSize.x ||
-      input.pos.y > input.clipPos.y + input.clipSize.y) {
-    discard;
-  }
-  float4 base = tex0.Sample(samp0, input.uv);
-  if (input.maskUv.x >= 0.0) {
-    float maskR = tex0.Sample(samp0, input.maskUv).r;
-    return float4(base.rgb * lerp(float3(1,1,1), input.color.rgb, maskR), base.a * input.color.a);
-  }
-  return base * input.color;
-}
-"""
-
+  when defined(shadyBinaryShaders):
+    const
+      vertexShaderCode = staticRead("shaders/silky.vs.cso")
+      pixelShaderCode = staticRead("shaders/silky.ps.cso")
+  else:
+    const
+      vertexShaderSrc = toHLSL(silkyVert, shaderVertex)
+      pixelShaderSrc = toHLSL(silkyFrag, shaderFragment)
+      vertexShaderCode = compileHlslShader(
+        vertexShaderSrc,
+        VertexHlslPath,
+        VertexCsoPath,
+        "VSMain",
+        "vs_6_0"
+      )
+      pixelShaderCode = compileHlslShader(
+        pixelShaderSrc,
+        PixelHlslPath,
+        PixelCsoPath,
+        "PSMain",
+        "ps_6_0"
+      )
   let
     safeSize = clampViewport(size)
-    vsBlob = compileShader(vertexShaderSrc, "VSMain", "vs_5_0")
-    psBlob = compileShader(pixelShaderSrc, "PSMain", "ps_5_0")
+
+  when defined(shadyBinaryShaders):
+    let
+      vsBytecode = shaderBytecode(vertexShaderCode)
+      psBytecode = shaderBytecode(pixelShaderCode)
+  else:
+    let
+      vsBlob = compileShader(vertexShaderSrc, "VSMain", "vs_5_0")
+      psBlob = compileShader(pixelShaderSrc, "PSMain", "ps_5_0")
+      vsBytecode = shaderBytecode(vsBlob)
+      psBytecode = shaderBytecode(psBlob)
 
   var range = D3D12_DESCRIPTOR_RANGE(
     RangeType: D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
@@ -348,6 +319,17 @@ float4 PSMain(PSInput input) : SV_TARGET {
   )
 
   var rootParams = [
+    D3D12_ROOT_PARAMETER(
+      ParameterType: D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
+      data: D3D12_ROOT_PARAMETER_UNION(
+        Constants: D3D12_ROOT_CONSTANTS(
+          ShaderRegister: 0,
+          RegisterSpace: 0,
+          Num32BitValues: 4
+        )
+      ),
+      ShaderVisibility: D3D12_SHADER_VISIBILITY_VERTEX
+    ),
     D3D12_ROOT_PARAMETER(
       ParameterType: D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
       data: D3D12_ROOT_PARAMETER_UNION(
@@ -473,8 +455,8 @@ float4 PSMain(PSInput input) : SV_TARGET {
 
   var psoDesc = D3D12_GRAPHICS_PIPELINE_STATE_DESC(
     pRootSignature: state.rootSignature,
-    VS: shaderBytecode(vsBlob),
-    PS: shaderBytecode(psBlob),
+    VS: vsBytecode,
+    PS: psBytecode,
     StreamOutput: D3D12_STREAM_OUTPUT_DESC(),
     BlendState: blendDesc,
     SampleMask: D3D12_DEFAULT_SAMPLE_MASK,
@@ -519,8 +501,9 @@ float4 PSMain(PSInput input) : SV_TARGET {
     addr psoDesc
   )
 
-  release(vsBlob)
-  release(psBlob)
+  when not defined(shadyBinaryShaders):
+    release(vsBlob)
+    release(psBlob)
 
   state.viewportSize = safeSize
   state.createVertexBuffer(InitialVertexCapacity)
@@ -565,7 +548,7 @@ proc ensureVertexCapacity(state: Drawer, vertexCount: int) =
     newCapacity *= 2
   state.createVertexBuffer(newCapacity)
 
-proc recordDraw(state: Drawer, vertexCount: int) =
+proc recordDraw(state: Drawer, vertexCount: int, atlasSize: Vec2) =
   ## Records the DX12 draw pass for the current frame.
   state.ctx.commandAllocator.reset()
   state.ctx.commandList.reset(state.ctx.commandAllocator, state.pipelineState)
@@ -600,8 +583,20 @@ proc recordDraw(state: Drawer, vertexCount: int) =
 
   var heaps = [state.srvHeap]
   state.ctx.commandList.setDescriptorHeaps(1, addr heaps[0])
-  state.ctx.commandList.setGraphicsRootDescriptorTable(
+  var shaderUniforms = [
+    state.viewportSize.x.float32,
+    state.viewportSize.y.float32,
+    atlasSize.x,
+    atlasSize.y
+  ]
+  state.ctx.commandList.setGraphicsRoot32BitConstants(
     0,
+    uint32(shaderUniforms.len),
+    unsafeAddr shaderUniforms[0],
+    0
+  )
+  state.ctx.commandList.setGraphicsRootDescriptorTable(
+    1,
     state.srvHandleGpu
   )
   state.ctx.commandList.iaSetPrimitiveTopology(
@@ -638,7 +633,6 @@ proc endFrame*(
   let quadsArr = cast[ptr UncheckedArray[DrawerVertex]](quads)
   for i in 0 ..< quadCount:
     vertices.add(quadsArr[i])
-  vertices.normalizeVertices(drawer.viewportSize, atlasSize)
 
   if vertexCount > 0:
     copyMem(
@@ -647,7 +641,7 @@ proc endFrame*(
       vertexCount * sizeof(DrawerVertex)
     )
 
-  drawer.recordDraw(vertexCount)
+  drawer.recordDraw(vertexCount, atlasSize)
   drawer.ctx.executeFrame(
     if drawer.window != nil: drawer.window.vsync else: true
   )
