@@ -7,7 +7,7 @@ srcDir        = "src"
 
 requires "nim >= 2.2.4"
 requires "pixie"
-requires "shady#f9ab26d946c32cd9da7c04394a1353a375a9dba5"
+requires "shady"
 requires "vmath"
 requires "windy"
 requires "dx12"
