@@ -239,8 +239,7 @@ proc addDir*(builder: AtlasBuilder, path: string, removePrefix: string = "") =
       )
       var key = file.path.replace("\\", "/")
       if removePrefix.len > 0:
-        var prefix = removePrefix.replace("\\", "/")
-        key.removePrefix(prefix)
+        key = relativePath(file.path, removePrefix).replace("\\", "/")
       key.removeSuffix(".png")
       builder.atlas.entries[key] = entry
 
