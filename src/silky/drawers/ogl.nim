@@ -1,6 +1,7 @@
 import
   std/[strformat, strutils],
-  pixie, opengl, shady, vmath, windy
+  pixie, opengl, shady, vmath, windy,
+  silky/drawers/shader
 
 type
   BufferKind* = enum
@@ -49,11 +50,6 @@ type
     layers*: array[2, seq[DrawerVertex]]
     currentLayer*: int
     layerStack*: seq[int]
-
-var
-  mvp: Uniform[Mat4]
-  atlasSize: Uniform[Vec2]
-  atlasSampler: Uniform[Sampler2D]
 
 func size(componentType: GLenum): Positive =
   ## Returns the byte size of a GL component type.
@@ -467,54 +463,6 @@ proc bindUniforms*(shader: Shader) =
 
     uniform.changed = false
 
-proc silkyVert(
-  pos: Vec2,
-  uv: Vec2,
-  color: ColorRGBX,
-  clipPos: Vec2,
-  clipSize: Vec2,
-  maskUv: Vec2,
-  fragmentUv: var Vec2,
-  fragmentColor: var Vec4,
-  fragmentClipPos: var Vec2,
-  fragmentClipSize: var Vec2,
-  fragmentPos: var Vec2,
-  fragmentMaskUv: var Vec2
-) =
-  ## Vertex shader for Silky's OpenGL drawer.
-  gl_Position = mvp * vec4(pos.x, pos.y, 0.0, 1.0)
-  fragmentUv = uv / atlasSize
-  fragmentColor = color.vec4
-  fragmentClipPos = clipPos
-  fragmentClipSize = clipSize
-  fragmentPos = pos
-  fragmentMaskUv = maskUv / atlasSize
-
-proc silkyFrag(
-  fragmentUv: Vec2,
-  fragmentColor: Vec4,
-  fragmentClipPos: Vec2,
-  fragmentClipSize: Vec2,
-  fragmentPos: Vec2,
-  fragmentMaskUv: Vec2,
-  fragColor: var Vec4
-) =
-  ## Fragment shader for Silky's OpenGL drawer.
-  if fragmentPos.x < fragmentClipPos.x or
-    fragmentPos.y < fragmentClipPos.y or
-    fragmentPos.x > fragmentClipPos.x + fragmentClipSize.x or
-    fragmentPos.y > fragmentClipPos.y + fragmentClipSize.y:
-    discardFragment()
-  elif fragmentMaskUv.x >= 0.0:
-    let base = texture(atlasSampler, fragmentUv)
-    let maskR = texture(atlasSampler, fragmentMaskUv).r
-    fragColor = vec4(
-      base.rgb * mix(vec3(1.0), fragmentColor.rgb, maskR),
-      base.a * fragmentColor.a
-    )
-  else:
-    fragColor = texture(atlasSampler, fragmentUv) * fragmentColor
-
 proc newDrawer*(window: Window, image: Image): Drawer =
   ## Creates a new OpenGL drawer and eagerly uploads its resources.
   discard window
@@ -671,8 +619,7 @@ proc endFrame*(
   )
 
   glUseProgram(drawer.shader.programId)
-  mvp = ortho(0.0'f, size.x, size.y, 0.0'f, -1000.0, 1000.0)
-  drawer.shader.setUniform("mvp", mvp)
+  drawer.shader.setUniform("viewportSize", size)
   drawer.shader.setUniform(
     "atlasSize",
     vec2(image.width.float32, image.height.float32)
