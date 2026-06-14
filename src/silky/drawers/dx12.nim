@@ -2,7 +2,7 @@ when not defined(windows):
   {.error: "The Silky DirectX 12 backend requires Windows.".}
 
 import
-  pixie, vmath, windy,
+  pixie, vmath, silky/window,
   pkg/dx12, pkg/dx12/context
 
 when not defined(shadyBinaryShaders):

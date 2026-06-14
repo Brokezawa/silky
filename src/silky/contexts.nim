@@ -1,6 +1,6 @@
 import
   std/[tables, unicode, times],
-  pixie, vmath, windy, bumpy,
+  pixie, vmath, silky/window, bumpy,
   silky/atlas
 
 when defined(profile):

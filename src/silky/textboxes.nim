@@ -35,7 +35,7 @@ when defined(silkyTesting):
     ## Stub for setting clipboard in test mode.
     discard
 else:
-  import silky/contexts, windy
+  import silky/contexts, silky/window
 
 const
   LF = Rune(10)

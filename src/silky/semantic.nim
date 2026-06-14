@@ -5,7 +5,7 @@ import
   vmath, bumpy, chroma,
   silky/atlas, testwindow
 
-from windy/common import Button, CursorKind, Cursor
+from silky/window import Button, CursorKind, Cursor
 
 type
   WidgetState* = object

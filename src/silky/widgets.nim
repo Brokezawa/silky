@@ -1,11 +1,9 @@
-import
-  std/[tables, unicode, times, options],
-  vmath, bumpy, chroma
+import std/[tables, unicode, times, options], vmath, bumpy, chroma
 
 when defined(silkyTesting):
   import silky/semantic, silky/testing
 else:
-  import silky/contexts, windy
+  import silky/contexts, silky/window
 
 when defined(macos):
   const ScrollSpeed* = 10.0
@@ -13,7 +11,6 @@ else:
   const ScrollSpeed* = -10.0
 
 type
-
   SubWindowState* = ref object
     pos*: Vec2
     size*: Vec2
@@ -38,8 +35,7 @@ type
   DropDownState* = ref object
     open*: bool
 
-  MenuState* = ref object
-    ## Tracks which menus are open and their active hit areas.
+  MenuState* = ref object ## Tracks which menus are open and their active hit areas.
     openPath*: seq[string]
     activeRects: seq[Rect]
 
@@ -61,13 +57,13 @@ type
     clicked*: bool
 
   Interaction* = enum
-    None,
-    Pressed,
-    Held,
-    Released,
-    ReleasedOutside,
-    Hovered,
-    Disabled,
+    None
+    Pressed
+    Held
+    Released
+    ReleasedOutside
+    Hovered
+    Disabled
     Error
 
 var
@@ -75,19 +71,16 @@ var
   frameStates*: Table[string, FrameState]
   scrubberStates*: Table[string, ScrubberState]
   dropDownStates*: Table[string, DropDownState]
-  menuState*: MenuState = MenuState(
-    openPath: @[],
-    activeRects: @[]
-  )
+  menuState*: MenuState = MenuState(openPath: @[], activeRects: @[])
   menuLayouts: seq[MenuLayout]
   menuPathStack: seq[string]
 
 proc mouseHover(
-  interactor: var Interactor,
-  mousePos: Vec2,
-  clipRect: Rect,
-  layer: int,
-  widgetRect: Rect
+    interactor: var Interactor,
+    mousePos: Vec2,
+    clipRect: Rect,
+    layer: int,
+    widgetRect: Rect,
 ): bool =
   ## Resolve mouse hovering by taking information from the last frame.
   inc interactor.currentId
@@ -106,14 +99,13 @@ proc mouseHover*(sk: Silky, window: Window, r: Rect): bool =
   not sk.mouseConsumed and hit
 
 proc interact*(
-  sk: Silky,
-  widgetRect: Rect,
-  isEnabled: bool,
-  isError: bool = false
+    sk: Silky, widgetRect: Rect, isEnabled: bool, isError: bool = false
 ): Interaction =
   ## Determine the interaction given mouse and widget states.
   let
-    hover = sk.interactor.mouseHover(sk.mousePos, sk.clipRect, sk.currentDrawLayer, widgetRect)
+    hover = sk.interactor.mouseHover(
+      sk.mousePos, sk.clipRect, sk.currentDrawLayer, widgetRect
+    )
     pressed = sk.buttonPressed[MouseLeft]
     down = sk.buttonDown[MouseLeft]
     released = sk.buttonReleased[MouseLeft]
@@ -141,10 +133,7 @@ proc menuPathOpen(path: seq[string]): bool =
 proc menuEnsureState() =
   ## Initialize menu state if not already created.
   if menuState.isNil:
-    menuState = MenuState(
-      openPath: @[],
-      activeRects: @[]
-    )
+    menuState = MenuState(openPath: @[], activeRects: @[])
 
 proc menuAddActive(rect: Rect) =
   ## Record a rect so outside-click detection can close menus.
@@ -174,8 +163,8 @@ proc subWindowStart*(
     title: string,
     show: var bool,
     initialOrigin: Option[Vec2],
-    initialSize: Option[Vec2]
-  ): SubWindowState =
+    initialSize: Option[Vec2],
+): SubWindowState =
   ## Begin a subwindow; stores body rect and visibility on the state.
   if title notin subWindowStates:
     let defaultPos = vec2(10 + subWindowStates.len * (300 + sk.theme.spacing), 10)
@@ -186,14 +175,15 @@ proc subWindowStart*(
       minimized: false,
       bodyPos: vec2(0),
       bodySize: vec2(0),
-      visible: false
+      visible: false,
     )
   let subWindowState = subWindowStates[title]
   if not show:
     subWindowState.visible = false
     return subWindowState
 
-  let size = if subWindowState.minimized:
+  let size =
+    if subWindowState.minimized:
       vec2(subWindowState.size.x, float32(sk.theme.headerHeight + sk.theme.border * 2))
     else:
       subWindowState.size
@@ -203,7 +193,7 @@ proc subWindowStart*(
   # Draw the header.
   sk.pushLayout(
     subWindowState.pos + vec2(sk.theme.border),
-    vec2(subWindowState.size.x - sk.theme.border.float32 * 2, sk.theme.headerHeight)
+    vec2(subWindowState.size.x - sk.theme.border.float32 * 2, sk.theme.headerHeight),
   )
 
   # Handle dragging the window.
@@ -232,12 +222,8 @@ proc subWindowStart*(
   # Handle minimizing/maximizing button for the window.
   let
     minimizeSize = sk.getImageSize("maximized")
-    minimizeRect = rect(
-      sk.at.x,
-      sk.at.y,
-      minimizeSize.x.float32,
-      minimizeSize.y.float32
-    )
+    minimizeRect =
+      rect(sk.at.x, sk.at.y, minimizeSize.x.float32, minimizeSize.y.float32)
     minimizeInteraction = sk.interact(minimizeRect, true)
 
   if minimizeInteraction == Pressed:
@@ -260,7 +246,7 @@ proc subWindowStart*(
       sk.at.x + sk.size.x - closeSize.x.float32 - sk.theme.padding.float32 * 5,
       sk.at.y,
       closeSize.x.float32,
-      closeSize.y.float32
+      closeSize.y.float32,
     )
     closeInteraction = sk.interact(closeRect, true)
 
@@ -270,8 +256,11 @@ proc subWindowStart*(
   sk.drawImage("close", closeRect.xy)
   sk.popLayout()
 
-  let bodyPos = subWindowState.pos + vec2(sk.theme.border, sk.theme.border + sk.theme.headerHeight)
-  let bodySize = subWindowState.size - vec2(sk.theme.border * 2, sk.theme.border * 2 + sk.theme.headerHeight)
+  let bodyPos =
+    subWindowState.pos + vec2(sk.theme.border, sk.theme.border + sk.theme.headerHeight)
+  let bodySize =
+    subWindowState.size -
+    vec2(sk.theme.border * 2, sk.theme.border * 2 + sk.theme.headerHeight)
 
   subWindowState.bodyPos = bodyPos
   subWindowState.bodySize = bodySize
@@ -290,7 +279,7 @@ proc subWindowEnd*(sk: Silky, window: Window, subWindowState: SubWindowState) =
       sk.at.x + sk.size.x - resizeHandleSize.x.float32 - sk.theme.border.float32,
       sk.at.y + sk.size.y - resizeHandleSize.y.float32 - sk.theme.border.float32,
       resizeHandleSize.x.float32,
-      resizeHandleSize.y.float32
+      resizeHandleSize.y.float32,
     )
     resizeHandleInteraction = sk.interact(resizeHandleRect, true)
 
@@ -306,7 +295,9 @@ proc subWindowEnd*(sk: Silky, window: Window, subWindowState: SubWindowState) =
   if subWindowState.resizing:
     subWindowState.size = sk.mousePos - subWindowState.resizeOffset
     subWindowState.size.x = max(subWindowState.size.x, 200f)
-    subWindowState.size.y = max(subWindowState.size.y, float32(sk.theme.headerHeight * 2 + sk.theme.border * 2))
+    subWindowState.size.y = max(
+      subWindowState.size.y, float32(sk.theme.headerHeight * 2 + sk.theme.border * 2)
+    )
 
   sk.drawImage("resize", resizeHandleRect.xy)
   sk.popLayout()
@@ -324,9 +315,12 @@ template subWindow*(title: string, show: var bool, body: untyped) =
       sk.subWindowEnd(window, state)
   sk.endWidget()
 
-template subWindow*(title: string, show: var bool, initialOrigin: Vec2, initialSize: Vec2, body: untyped) =
+template subWindow*(
+    title: string, show: var bool, initialOrigin: Vec2, initialSize: Vec2, body: untyped
+) =
   ## Create a window frame with explicit initial position and size.
-  let state = sk.subWindowStart(window, title, show, some(initialOrigin), some(initialSize))
+  let state =
+    sk.subWindowStart(window, title, show, some(initialOrigin), some(initialSize))
   sk.beginWidget("SubWindow", name = title, rect = rect(state.pos, state.size))
   if state.visible:
     try:
@@ -337,19 +331,16 @@ template subWindow*(title: string, show: var bool, initialOrigin: Vec2, initialS
       sk.subWindowEnd(window, state)
   sk.endWidget()
 
-proc frameStart*(sk: Silky, id: string, framePos, frameSize: Vec2): tuple[state: FrameState, originPos: Vec2] =
+proc frameStart*(
+    sk: Silky, id: string, framePos, frameSize: Vec2
+): tuple[state: FrameState, originPos: Vec2] =
   ## Begin a scrollable frame; returns state and origin for cleanup.
   if id notin frameStates:
     frameStates[id] = FrameState()
   let frameState = frameStates[id]
   sk.pushLayout(framePos, frameSize)
   sk.draw9Patch("frame.9patch", 6, sk.pos, sk.size)
-  sk.pushClipRect(rect(
-    sk.pos.x + 1,
-    sk.pos.y + 1,
-    sk.size.x - 2,
-    sk.size.y - 2
-  ))
+  sk.pushClipRect(rect(sk.pos.x + 1, sk.pos.y + 1, sk.size.x - 2, sk.size.y - 2))
   sk.at = sk.pos + vec2(sk.theme.padding)
   let originPos = sk.at
   sk.at -= frameState.scrollPos
@@ -357,9 +348,11 @@ proc frameStart*(sk: Silky, id: string, framePos, frameSize: Vec2): tuple[state:
 
 proc frameEnd*(sk: Silky, window: Window, frameState: FrameState, originPos: Vec2) =
   ## Finish a scrollable frame and handle scrollbars.
-  if frameState.scrollingY and (window.buttonReleased[MouseLeft] or not window.buttonDown[MouseLeft]):
+  if frameState.scrollingY and
+      (window.buttonReleased[MouseLeft] or not window.buttonDown[MouseLeft]):
     frameState.scrollingY = false
-  if frameState.scrollingX and (window.buttonReleased[MouseLeft] or not window.buttonDown[MouseLeft]):
+  if frameState.scrollingX and
+      (window.buttonReleased[MouseLeft] or not window.buttonDown[MouseLeft]):
     frameState.scrollingX = false
 
   # Calculate content size from stretchAt (add padding for last element).
@@ -391,22 +384,26 @@ proc frameEnd*(sk: Silky, window: Window, frameState: FrameState, originPos: Vec
   if contentSize.y > sk.size.y:
     let
       scrollSize = contentSize.y
-      scrollbarTrackRect = rect(
-        sk.pos.x + sk.size.x - 10,
-        sk.pos.y + 2,
-        8,
-        sk.size.y - 4 - 10
-      )
-    sk.draw9Patch("scrollbar.track.9patch", 4, scrollbarTrackRect.xy, scrollbarTrackRect.wh)
+      scrollbarTrackRect =
+        rect(sk.pos.x + sk.size.x - 10, sk.pos.y + 2, 8, sk.size.y - 4 - 10)
+    sk.draw9Patch(
+      "scrollbar.track.9patch", 4, scrollbarTrackRect.xy, scrollbarTrackRect.wh
+    )
 
     let
-      scrollPosPercent = if scrollMax.y > 0: frameState.scrollPos.y / scrollMax.y else: 0.0
+      scrollPosPercent =
+        if scrollMax.y > 0:
+          frameState.scrollPos.y / scrollMax.y
+        else:
+          0.0
       scrollSizePercent = sk.size.y / scrollSize
       scrollbarHandleRect = rect(
         scrollbarTrackRect.x,
-        scrollbarTrackRect.y + (scrollbarTrackRect.h - (scrollbarTrackRect.h * scrollSizePercent)) * scrollPosPercent,
+        scrollbarTrackRect.y +
+          (scrollbarTrackRect.h - (scrollbarTrackRect.h * scrollSizePercent)) *
+          scrollPosPercent,
         8,
-        scrollbarTrackRect.h * scrollSizePercent
+        scrollbarTrackRect.h * scrollSizePercent,
       )
       scrollbarHandleInteraction = sk.interact(scrollbarHandleRect, true)
 
@@ -428,22 +425,26 @@ proc frameEnd*(sk: Silky, window: Window, frameState: FrameState, originPos: Vec
   if contentSize.x > sk.size.x:
     let
       scrollSize = contentSize.x
-      scrollbarTrackRect = rect(
-        sk.pos.x + 2,
-        sk.pos.y + sk.size.y - 10,
-        sk.size.x - 4 - 10,
-        8
-      )
-    sk.draw9Patch("scrollbar.track.9patch", 4, scrollbarTrackRect.xy, scrollbarTrackRect.wh)
+      scrollbarTrackRect =
+        rect(sk.pos.x + 2, sk.pos.y + sk.size.y - 10, sk.size.x - 4 - 10, 8)
+    sk.draw9Patch(
+      "scrollbar.track.9patch", 4, scrollbarTrackRect.xy, scrollbarTrackRect.wh
+    )
 
     let
-      scrollPosPercent = if scrollMax.x > 0: frameState.scrollPos.x / scrollMax.x else: 0.0
+      scrollPosPercent =
+        if scrollMax.x > 0:
+          frameState.scrollPos.x / scrollMax.x
+        else:
+          0.0
       scrollSizePercent = sk.size.x / scrollSize
       scrollbarHandleRect = rect(
-        scrollbarTrackRect.x + (scrollbarTrackRect.w - (scrollbarTrackRect.w * scrollSizePercent)) * scrollPosPercent,
+        scrollbarTrackRect.x +
+          (scrollbarTrackRect.w - (scrollbarTrackRect.w * scrollSizePercent)) *
+          scrollPosPercent,
         scrollbarTrackRect.y,
         scrollbarTrackRect.w * scrollSizePercent,
-        8
+        8,
       )
       scrollbarHandleInteraction = sk.interact(scrollbarHandleRect, true)
 
@@ -493,17 +494,13 @@ template button*(label: string, isEnabled: bool, isError: bool, body: untyped) =
         sk.theme.defaultTextColor
     interaction = sk.interact(buttonRect, isEnabled, isError)
 
-  let patch = case interaction
-    of Error:
-      "button.error.9patch"
-    of Disabled:
-      "button.disabled.9patch"
-    of None, ReleasedOutside:
-      "button.9patch"
-    of Pressed, Held:
-      "button.down.9patch"
-    of Hovered, Released:
-      "button.hover.9patch"
+  let patch =
+    case interaction
+    of Error: "button.error.9patch"
+    of Disabled: "button.disabled.9patch"
+    of None, ReleasedOutside: "button.9patch"
+    of Pressed, Held: "button.down.9patch"
+    of Hovered, Released: "button.hover.9patch"
 
   sk.draw9Patch(patch, 8, sk.at, buttonSize)
 
@@ -615,7 +612,7 @@ template radioButton*[T](label: string, variable: var T, value: T) =
     iconPos = vec2(sk.at.x, sk.at.y + (height - iconSize.y.float32) * 0.5)
     textPos = vec2(
       iconPos.x + iconSize.x.float32 + sk.theme.spacing.float32,
-      sk.at.y + (height - textSize.y) * 0.5
+      sk.at.y + (height - textSize.y) * 0.5,
     )
   sk.drawImage(if on: "radio.on" else: "radio.off", iconPos)
   discard sk.drawText(sk.textStyle, label, textPos, sk.theme.defaultTextColor)
@@ -623,7 +620,12 @@ template radioButton*[T](label: string, variable: var T, value: T) =
   let
     pressed = interaction == Pressed or interaction == Held
     hovered = pressed or interaction == Hovered
-  sk.setWidgetState(enabled = true #[isEnabled]#, pressed = pressed, hovered = hovered, checked = on)
+  sk.setWidgetState(
+    enabled = true, #[isEnabled]#
+    pressed = pressed,
+    hovered = hovered,
+    checked = on,
+  )
   sk.endWidget()
 
   sk.advance(vec2(width, height))
@@ -648,7 +650,7 @@ template checkBox*(label: string, value: var bool) =
     iconPos = vec2(sk.at.x, sk.at.y + (height - iconSize.y.float32) * 0.5)
     textPos = vec2(
       iconPos.x + iconSize.x.float32 + sk.theme.spacing.float32,
-      sk.at.y + (height - textSize.y) * 0.5
+      sk.at.y + (height - textSize.y) * 0.5,
     )
   sk.drawImage(if value: "check.on" else: "check.off", iconPos)
   discard sk.drawText(sk.textStyle, label, textPos, sk.theme.defaultTextColor)
@@ -656,13 +658,21 @@ template checkBox*(label: string, value: var bool) =
   let
     pressed = interaction == Pressed or interaction == Held
     hovered = pressed or interaction == Hovered
-  sk.setWidgetState(enabled = true #[isEnabled]#, pressed = pressed, hovered = hovered, checked = value)
+  sk.setWidgetState(
+    enabled = true, #[isEnabled]#
+    pressed = pressed,
+    hovered = hovered,
+    checked = value,
+  )
   sk.endWidget()
   sk.advance(vec2(width, height))
 
 template dropDown*[T](selected: var T, options: openArray[T]) =
-  ## Dropdown styled like input text; options render in a new layer.
   let id = "dropdown_" & $cast[uint](addr selected)
+  dropDown(id, selected, options)
+
+template dropDown*[T](id: string, selected: var T, options: openArray[T]) =
+  ## Dropdown styled like input text; options render in a new layer.
 
   if id notin dropDownStates:
     dropDownStates[id] = DropDownState()
@@ -687,12 +697,18 @@ template dropDown*[T](selected: var T, options: openArray[T]) =
   # Draw control body.
   sk.pushLayout(sk.at, vec2(width, height))
   let hovered = interaction in [Pressed, Held, Hovered]
-  let bgColor = if state.open or hovered: sk.theme.dropdownHoverBgColor else: sk.theme.dropdownBgColor
+  let bgColor =
+    if state.open or hovered:
+      sk.theme.dropdownHoverBgColor
+    else:
+      sk.theme.dropdownBgColor
   sk.draw9Patch("dropdown.9patch", 6, sk.pos, sk.size, bgColor)
-  discard sk.drawText(sk.textStyle, displayText, sk.at + vec2(sk.theme.padding), sk.theme.defaultTextColor)
+  discard sk.drawText(
+    sk.textStyle, displayText, sk.at + vec2(sk.theme.padding), sk.theme.defaultTextColor
+  )
   let arrowPos = vec2(
     sk.pos.x + sk.size.x - arrowSize.x.float32 - sk.theme.padding.float32,
-    sk.pos.y + (height - arrowSize.y.float32) * 0.5
+    sk.pos.y + (height - arrowSize.y.float32) * 0.5,
   )
   sk.drawImage("droparrow", arrowPos)
   sk.popLayout()
@@ -736,9 +752,8 @@ template dropDown*[T](selected: var T, options: openArray[T]) =
     sk.popLayout()
 
     # Close when clicking outside (bypass mouseConsumed — this is an intentional raw check).
-    if window.buttonPressed[MouseLeft] and
-      not window.mousePos.vec2.overlaps(dropRect) and
-      not window.mousePos.vec2.overlaps(popupRect):
+    if buttonPressed(window, MouseLeft) and not sk.mousePos.overlaps(dropRect) and
+        not sk.mousePos.overlaps(popupRect):
       state.open = false
 
     sk.popClipRect()
@@ -750,7 +765,9 @@ template listBox*[T](id: string, items: seq[T], selectedIndex: var int) =
   let rowHeight = font.lineHeight + sk.theme.padding.float32
   let outerWidth = sk.size.x - sk.theme.padding.float32 * 3
   # Use a fixed height or calculate based on items, but capped at 4 items.
-  let listHeight = min(rowHeight * 4.float32, rowHeight * max(1, items.len).float32) + sk.theme.padding.float32 * 2
+  let listHeight =
+    min(rowHeight * 4.float32, rowHeight * max(1, items.len).float32) +
+    sk.theme.padding.float32 * 2
 
   frame(id, sk.at, vec2(outerWidth, listHeight)):
     let itemWidth = sk.size.x - sk.theme.padding.float32 * 3
@@ -780,7 +797,11 @@ template progressBar*(value: SomeNumber, minVal: SomeNumber, maxVal: SomeNumber)
     maxF = maxVal.float32
     v = clamp(value.float32, minF, maxF)
     range = maxF - minF
-    t = if range == 0: 0f else: clamp((v - minF) / range, 0f, 1f)
+    t =
+      if range == 0:
+        0f
+      else:
+        clamp((v - minF) / range, 0f, 1f)
     bodySize = sk.getImageSize("progressBar.body.9patch")
     height = bodySize.y.float32
     width = max(bodySize.x.float32, sk.size.x - sk.theme.padding.float32 * 3)
@@ -789,9 +810,15 @@ template progressBar*(value: SomeNumber, minVal: SomeNumber, maxVal: SomeNumber)
   sk.draw9Patch("progressBar.body.9patch", 6, barRect.xy, barRect.wh)
 
   let scrubberPadding = 4
-  let fillWidth = scrubberPadding.float32 * 2 + (width - scrubberPadding.float32 * 2) * t
+  let fillWidth =
+    scrubberPadding.float32 * 2 + (width - scrubberPadding.float32 * 2) * t
   if fillWidth > 0:
-    sk.draw9Patch("progressBar.progress.9patch", scrubberPadding, barRect.xy, vec2(fillWidth, height))
+    sk.draw9Patch(
+      "progressBar.progress.9patch",
+      scrubberPadding,
+      barRect.xy,
+      vec2(fillWidth, height),
+    )
 
   sk.advance(vec2(width, height))
 
@@ -871,7 +898,9 @@ template h1text*(t: string) =
   let textSize = sk.drawText("H1", t, sk.at, sk.theme.textH1Color)
   sk.advance(textSize)
 
-template scrubber*[T, U](id: string, value: var T, minVal: T, maxVal: U, label: string = "") =
+template scrubber*[T, U](
+    id: string, value: var T, minVal: T, maxVal: U, label: string = ""
+) =
   ## Draggable scrubber that spans available width and advances layout.
   let
     minF = minVal.float32
@@ -886,15 +915,27 @@ template scrubber*[T, U](id: string, value: var T, minVal: T, maxVal: U, label: 
   let
     baseHandleSize = sk.getImageSize("scrubber.handle")
     buttonHandleSize = sk.getImageSize("button.9patch")
-    labelSize = if label.len > 0: sk.getTextSize(sk.textStyle, label) else: vec2(0, 0)
-    minLabelSize = if label.len > 0: sk.getTextSize(sk.textStyle, "0000") else: vec2(0, 0)
+    labelSize =
+      if label.len > 0:
+        sk.getTextSize(sk.textStyle, label)
+      else:
+        vec2(0, 0)
+    minLabelSize =
+      if label.len > 0:
+        sk.getTextSize(sk.textStyle, "0000")
+      else:
+        vec2(0, 0)
     knobTextPadding = sk.theme.padding.float32 * 2 + 8f
     handleWidth =
       if label.len > 0:
         max(buttonHandleSize.x, max(labelSize.x, minLabelSize.x) + knobTextPadding)
       else:
         baseHandleSize.x
-    handleHeight = if label.len > 0: max(buttonHandleSize.y, baseHandleSize.y) else: baseHandleSize.y
+    handleHeight =
+      if label.len > 0:
+        max(buttonHandleSize.y, baseHandleSize.y)
+      else:
+        baseHandleSize.y
     handleSize = vec2(handleWidth, handleHeight)
     height = handleSize.y
     width = sk.size.x - sk.theme.padding.float32 * 3
@@ -909,9 +950,16 @@ template scrubber*[T, U](id: string, value: var T, minVal: T, maxVal: U, label: 
 
   let
     # Normalize current value.
-    norm = if range == 0: 0f else: clamp((v - minF) / range, 0f, 1f)
+    norm =
+      if range == 0:
+        0f
+      else:
+        clamp((v - minF) / range, 0f, 1f)
     # Handle geometry.
-    handlePos = vec2(trackStart + norm * travel - handleSize.x * 0.5, controlRect.y + (height - handleSize.y) * 0.5)
+    handlePos = vec2(
+      trackStart + norm * travel - handleSize.x * 0.5,
+      controlRect.y + (height - handleSize.y) * 0.5,
+    )
     handleRect = rect(handlePos, handleSize)
     handleInteraction = sk.interact(handleRect, true)
     controlInteraction = sk.interact(controlRect, true)
@@ -933,14 +981,21 @@ template scrubber*[T, U](id: string, value: var T, minVal: T, maxVal: U, label: 
     value = (minF + t * range).T
 
   # Recompute normalized position after potential changes.
-  let norm2 = if range == 0: 0f else: clamp((value.float32 - minF) / range, 0f, 1f)
-  let handlePos2 = vec2(trackStart + norm2 * travel - handleSize.x * 0.5, controlRect.y + (height - handleSize.y) * 0.5)
+  let norm2 =
+    if range == 0:
+      0f
+    else:
+      clamp((value.float32 - minF) / range, 0f, 1f)
+  let handlePos2 = vec2(
+    trackStart + norm2 * travel - handleSize.x * 0.5,
+    controlRect.y + (height - handleSize.y) * 0.5,
+  )
 
   if label.len > 0:
     sk.draw9Patch("button.9patch", 8, handlePos2, handleSize)
     let textPos = vec2(
       handlePos2.x + (handleSize.x - labelSize.x) * 0.5,
-      handlePos2.y + (handleSize.y - labelSize.y) * 0.5
+      handlePos2.y + (handleSize.y - labelSize.y) * 0.5,
     )
     discard sk.drawText(sk.textStyle, label, textPos, sk.theme.defaultTextColor)
   else:
@@ -953,9 +1008,7 @@ proc menuPopupStart*(sk: Silky, path: seq[string], popupAt: Vec2, popupWidth = 2
   sk.pushLayer(PopupsLayer)
   sk.pushRawClipRect(rect(vec2(0, 0), sk.rootSize))
   let layout = MenuLayout(
-    origin: popupAt,
-    width: popupWidth.float32,
-    cursorY: sk.theme.menuPadding.float32
+    origin: popupAt, width: popupWidth.float32, cursorY: sk.theme.menuPadding.float32
   )
   menuLayouts.add(layout)
 
@@ -1005,22 +1058,23 @@ template menuBar*(body: untyped) =
   finally:
     sk.menuBarEnd(window)
 
-proc subMenuStart*(sk: Silky, window: Window, label: string, menuWidth = 200): MenuEntryContext =
+proc subMenuStart*(
+    sk: Silky, window: Window, label: string, menuWidth = 200
+): MenuEntryContext =
   ## Begin a submenu entry; returns context describing whether it is open.
   menuEnsureState()
   let path = menuPathStack & @[label]
   let isRoot = menuLayouts.len == 0
   var ctx = MenuEntryContext(
-    path: path,
-    popupPos: vec2(0),
-    popupWidth: menuWidth,
-    open: false,
-    isRoot: isRoot
+    path: path, popupPos: vec2(0), popupWidth: menuWidth, open: false, isRoot: isRoot
   )
 
   if isRoot:
     let textSize = sk.getTextSize(sk.textStyle, label)
-    let size = textSize + vec2(sk.theme.menuPadding.float32 * 2, sk.theme.menuPadding.float32 * 2)
+    let size =
+      textSize + vec2(
+        sk.theme.menuPadding.float32 * 2, sk.theme.menuPadding.float32 * 2
+      )
     let menuRect = rect(sk.at, size)
     menuAddActive(menuRect)
 
@@ -1040,7 +1094,12 @@ proc subMenuStart*(sk: Silky, window: Window, label: string, menuWidth = 200): M
 
     if hover or open:
       sk.drawRect(menuRect.xy, menuRect.wh, sk.theme.menuRootHoverColor)
-    discard sk.drawText(sk.textStyle, label, menuRect.xy + vec2(sk.theme.menuPadding), sk.theme.defaultTextColor)
+    discard sk.drawText(
+      sk.textStyle,
+      label,
+      menuRect.xy + vec2(sk.theme.menuPadding),
+      sk.theme.defaultTextColor,
+    )
     sk.at.x += size.x + sk.theme.spacing.float32
 
     if ctx.open:
@@ -1050,7 +1109,9 @@ proc subMenuStart*(sk: Silky, window: Window, label: string, menuWidth = 200): M
     var layout = menuLayouts[^1]
     let textSize = sk.getTextSize(sk.textStyle, label)
     let rowH = textSize.y + sk.theme.menuPadding.float32 * 2
-    let rowPos = vec2(layout.origin.x + sk.theme.menuPadding.float32, layout.origin.y + layout.cursorY)
+    let rowPos = vec2(
+      layout.origin.x + sk.theme.menuPadding.float32, layout.origin.y + layout.cursorY
+    )
     let rowSize = vec2(layout.width - sk.theme.menuPadding.float32 * 2, rowH)
     let itemRect = rect(rowPos, rowSize)
     menuAddActive(itemRect)
@@ -1071,10 +1132,12 @@ proc subMenuStart*(sk: Silky, window: Window, label: string, menuWidth = 200): M
       sk.textStyle,
       label,
       rowPos + vec2(sk.theme.textPadding),
-      sk.theme.defaultTextColor
+      sk.theme.defaultTextColor,
     )
 
-    let arrowPos = vec2(itemRect.x + itemRect.w - textSize.y, rowPos.y + sk.theme.textPadding.float32)
+    let arrowPos = vec2(
+      itemRect.x + itemRect.w - textSize.y, rowPos.y + sk.theme.textPadding.float32
+    )
     discard sk.drawText(sk.textStyle, ">", arrowPos, sk.theme.defaultTextColor)
 
     layout.cursorY += rowH
@@ -1107,7 +1170,9 @@ proc menuItemStart*(sk: Silky, window: Window, label: string): MenuItemContext =
 
   let textSize = sk.getTextSize(sk.textStyle, label)
   let rowH = textSize.y + sk.theme.menuPadding.float32 * 2
-  let rowPos = vec2(layout.origin.x + sk.theme.menuPadding.float32, layout.origin.y + layout.cursorY)
+  let rowPos = vec2(
+    layout.origin.x + sk.theme.menuPadding.float32, layout.origin.y + layout.cursorY
+  )
   let rowSize = vec2(layout.width - sk.theme.menuPadding.float32 * 2, rowH)
   let itemRect = rect(rowPos, rowSize)
   menuAddActive(itemRect)
@@ -1117,10 +1182,7 @@ proc menuItemStart*(sk: Silky, window: Window, label: string): MenuItemContext =
   if hover:
     sk.drawRect(itemRect.xy, itemRect.wh, sk.theme.menuPopupHoverColor)
   discard sk.drawText(
-    sk.textStyle,
-    label,
-    rowPos + vec2(sk.theme.textPadding),
-    sk.theme.defaultTextColor
+    sk.textStyle, label, rowPos + vec2(sk.theme.textPadding), sk.theme.defaultTextColor
   )
 
   var clicked = false
@@ -1128,11 +1190,7 @@ proc menuItemStart*(sk: Silky, window: Window, label: string): MenuItemContext =
     menuState.openPath.setLen(0)
     clicked = true
 
-  return MenuItemContext(
-    layout: layout,
-    rowH: rowH,
-    clicked: clicked
-  )
+  return MenuItemContext(layout: layout, rowH: rowH, clicked: clicked)
 
 proc menuItemEnd*(sk: Silky, ctx: MenuItemContext) =
   ## Finish a menu item and advance layout cursor.
@@ -1158,17 +1216,16 @@ template tooltip*(text: string) =
     pad = sk.theme.padding.float32
     tooltipSize = textSize + vec2(pad * 2, pad * 2)
     root = sk.rootSize
-    hasAnchor = sk.tooltipAnchor.w > 0 and
-      sk.tooltipAnchor.h > 0
-    anchorCenter = sk.tooltipAnchor.xy +
-      vec2(sk.tooltipAnchor.w, sk.tooltipAnchor.h) * 0.5
+    hasAnchor = sk.tooltipAnchor.w > 0 and sk.tooltipAnchor.h > 0
+    anchorCenter =
+      sk.tooltipAnchor.xy + vec2(sk.tooltipAnchor.w, sk.tooltipAnchor.h) * 0.5
 
   # Position centered on anchor below, flip above if needed.
   var tooltipPos =
     if hasAnchor:
       vec2(
         anchorCenter.x - tooltipSize.x * 0.5,
-        sk.tooltipAnchor.y + sk.tooltipAnchor.h + 8
+        sk.tooltipAnchor.y + sk.tooltipAnchor.h + 8,
       )
     else:
       sk.mousePos + vec2(16, 16)
@@ -1176,30 +1233,23 @@ template tooltip*(text: string) =
   if tooltipPos.y + tooltipSize.y > root.y:
     tooltipPos.y = sk.tooltipAnchor.y - tooltipSize.y - 8
   if tooltipSize.x <= root.x:
-    tooltipPos.x = clamp(
-      tooltipPos.x, pad, root.x - tooltipSize.x - pad)
+    tooltipPos.x = clamp(tooltipPos.x, pad, root.x - tooltipSize.x - pad)
   if tooltipSize.y <= root.y:
     tooltipPos.y = max(tooltipPos.y, pad)
 
   # Reset fade when anchor changes.
-  if not sk.tooltipActive or
-      sk.tooltipAnchor != sk.tooltipLastAnchor:
+  if not sk.tooltipActive or sk.tooltipAnchor != sk.tooltipLastAnchor:
     sk.tooltipPos = tooltipPos
     sk.tooltipFadeInTime = 0
   sk.tooltipLastAnchor = sk.tooltipAnchor
   sk.showTooltip = true
 
   let
-    fadeAlpha = clamp(
-      sk.tooltipFadeInTime / sk.tooltipFadeInDuration,
-      0.0, 1.0
-    ).float32
+    fadeAlpha = clamp(sk.tooltipFadeInTime / sk.tooltipFadeInDuration, 0.0, 1.0).float32
     fadeByte = (255.0 * fadeAlpha).uint8
     fadeColor = rgbx(fadeByte, fadeByte, fadeByte, fadeByte)
   sk.pushLayout(sk.tooltipPos, tooltipSize)
-  sk.draw9Patch(
-    "tooltip.9patch", 6, sk.pos, sk.size, fadeColor
-  )
+  sk.draw9Patch("tooltip.9patch", 6, sk.pos, sk.size, fadeColor)
 
   # Draw stem on top, pointing toward anchor.
   if hasAnchor and "tooltip.stem" in sk.atlas.entries:
@@ -1215,12 +1265,14 @@ template tooltip*(text: string) =
       uv3 = uvPos + vec2(0, stemH)
       colors = [fadeColor, fadeColor, fadeColor]
       above = anchorCenter.y < sk.pos.y + sk.size.y * 0.5
-      x = clamp(anchorCenter.x,
-        sk.pos.x + stemW * 0.5,
-        sk.pos.x + sk.size.x - stemW * 0.5)
+      x = clamp(
+        anchorCenter.x, sk.pos.x + stemW * 0.5, sk.pos.x + sk.size.x - stemW * 0.5
+      )
       cy =
-        if above: sk.pos.y + 1.0
-        else: sk.pos.y + sk.size.y - 1.0
+        if above:
+          sk.pos.y + 1.0
+        else:
+          sk.pos.y + sk.size.y - 1.0
       p0 = vec2(x - stemW * 0.5, cy - halfH)
       p1 = vec2(x + stemW * 0.5, cy - halfH)
       p2 = vec2(x + stemW * 0.5, cy + halfH)
@@ -1240,10 +1292,8 @@ template tooltip*(text: string) =
       (baseColor.b.float32 * fadeAlpha).uint8,
       (baseColor.a.float32 * fadeAlpha).uint8,
     )
-  discard sk.drawText(
-    sk.textStyle, tooltipText,
-    sk.pos + vec2(sk.theme.padding), textColor
-  )
+  discard
+    sk.drawText(sk.textStyle, tooltipText, sk.pos + vec2(sk.theme.padding), textColor)
   sk.popLayout()
 
   sk.popClipRect()

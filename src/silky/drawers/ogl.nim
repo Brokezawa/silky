@@ -1,6 +1,6 @@
 import
   std/[strformat, strutils],
-  pixie, opengl, shady, vmath, windy,
+  pixie, opengl, shady, vmath, silky/window,
   silky/drawers/shader
 
 type

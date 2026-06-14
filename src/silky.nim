@@ -4,7 +4,7 @@ when defined(silkyTesting):
   import silky/[semantic, atlas, widgets, textboxes, testing]
   export semantic, atlas, widgets, tables, textboxes, testing
 else:
-  import windy
+  import silky/window
   when not defined(useDirectX) and
       not defined(useVulkan) and
       not defined(useMetal4):
@@ -14,7 +14,7 @@ else:
       not defined(useVulkan) and
       not defined(useMetal4):
     export opengl
-  export windy, contexts, atlas, widgets, tables, textboxes
+  export window, contexts, atlas, widgets, tables, textboxes
 
   when defined(useMetal4):
     proc loadExtensions*() {.inline.} =

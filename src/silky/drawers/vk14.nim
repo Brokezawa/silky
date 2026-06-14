@@ -2,7 +2,7 @@ when not defined(windows):
   {.error: "The Silky Vulkan backend currently requires Windows.".}
 
 import
-  pixie, vmath, windy
+  pixie, vmath, silky/window
 import pkg/vk14 except Window
 
 when not defined(shadyBinaryShaders):
